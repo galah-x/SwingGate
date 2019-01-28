@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-01-28 09:27:24 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-01-28 14:07:19 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -91,32 +91,36 @@ period_t sleepTime = SLEEP_LONGEST; //period_t is an enum type defined in the Lo
 //period_t sleepTime = SLEEP_2S; //period_t is an enum type defined in the LowPower library (LowPower.h)
 //*********************************************************************************************
 #ifdef __AVR_ATmega1284P__
-  #define LED           15 // Moteino MEGAs have LEDs on D15
-  #define FLASH_SS      23
+#define LED           15 // Moteino MEGAs have LEDs on D15
+#define FLASH_SS      23
 #else
-  #define LED           9 // Moteinos have LEDs on D9
-  #define FLASH_SS      8
+#define LED           9 // Moteinos have LEDs on D9
+#define FLASH_SS      8
 #endif
 
 // these are the IOs used for the swing gate linear actuator
 
-#define DRN1             4  // direction pin for IBT_2 H bridge for swing motor first side
-#define EN1_N            3  // pwn/enable for  IBT_2 H bridge for swing motor first side
-#define DRN2             6  // direction pin for IBT_2 H bridge for swing motor second side
-#define EN2_N            5  // pwn/enable for  IBT_2 H bridge for swing motor second side
-#define IS1              A5 // current sense for IBT_2 H bridge for swing motor first side
-#define IS2              A4 // current sense for IBT_2 H bridge for swing motor second side
-#define BACKEMF1         A7 // sense motor backemf when freewheeling, 
-#define BACKEMF2         A6 // sense motor backemf when freewheeling, 
+const byte DRN1     = 4;  // direction pin for IBT_2 H bridge for swing motor first side
+const byte EN1      = 3;  // pwn/enable for  IBT_2 H bridge for swing motor first side
+const byte DRN2     = 6;  // direction pin for IBT_2 H bridge for swing motor second side
+const byte EN2      = 5;  // pwn/enable for  IBT_2 H bridge for swing motor second side
+const byte IS1      = A5; // current sense for IBT_2 H bridge for swing motor first side
+const byte IS2      = A4; // current sense for IBT_2 H bridge for swing motor second side
+const byte BACKEMF1 = A7; // sense motor backemf when freewheeling, 
+const byte BACKEMF2 = A6; // sense motor backemf when freewheeling, 
 
 // these are the IOs used for the swing gate lock (unlocker)
-#define LOCK             9  // its the enable pin for the paralleled 2x2A L298 H bridge, used as a protected NFET.
-                            // draws too much current (50mA) if I leave it enabled and drive the logic input active. 
+const byte LOCK     = 9;  // its the enable pin for the paralleled 2x2A L298 H bridge, used as a protected NFET.
+// draws too much current (50mA) if I leave it enabled and drive the logic input active. 
 
 // these are the IOs used for the swing gate sense inputs
-#define START_STOP_N     7   // active low 'start/stop input pin
-#define AUTO_CLOSE       A2  // if high, autoclose after 30 seconds
-#define BATT_ADC         A3  // analog IO for measuring battery
+const byte START_STOP_N = 7;   // active low 'start/stop input pin
+const byte AUTO_CLOSE   = A2;  // if high, autoclose after 30 seconds
+const byte BATT_ADC     = A3;  // analog IO for measuring battery
+
+const byte RUN_DIRECTION = A2;  // for testing simplified motor ver
+const byte RUN_FWD = 1;
+const byte RUN_BWD = 0;
 
 // The general plan for the swing linear actuator is to go slowly for a couple of seconds, then increase to max for main traverse,
 // then slow down again a bit before it reaches the limit. 
@@ -129,13 +133,16 @@ period_t sleepTime = SLEEP_LONGEST; //period_t is an enum type defined in the Lo
 // hopefully the first time it runs it can go slow all the way, and automatically figure out how long the fast traverse time
 // should be for subsequent operations. 
 
-#define DRN1_OPEN         HIGH
-#define DRN1_CLOSE        LOW
-#define DRN2_OPEN         LOW
-#define DRN2_CLOSE        HIGH
+#define DRN1_OPEN         1
+#define DRN1_CLOSE        0
+#define DRN2_OPEN         0
+#define DRN2_CLOSE        1
 
-#define LOCK_UNLOCK       HIGH
-#define LOCK_LOCKED       LOW
+#define PWM_ON            1
+#define PWM_OFF           0
+
+#define LOCK_UNLOCK       1
+#define LOCK_LOCKED       0
 
 // the battery adc sense uses a 404k resistor and 100k, for attenuation of 0.198.
 // Alternatively using the 3v3 rail as reference (its a small switcher off 12)
@@ -149,7 +156,7 @@ RFM69 radio;
 SPIFlash flash(FLASH_SS, 0xEF30);
 
 
-char current_state;
+byte state;
 
 #define STATE_CLOSED           0
 #define STATE_OPENING_START    1
@@ -161,9 +168,33 @@ char current_state;
 #define STATE_CLOSING_ENDING   7
 #define STATE_UNKNOWN          8
 
+// play with DC motor to get started
+const byte STATE_STOPPED = 100;
+const byte STATE_UNLOCK  = 101;
+const byte STATE_RUN = 102;
+const byte STATE_RUN_SLOW = 105;
+
+
+
 int traverse_runtime;
 int start_runtime;
 int end_runtime;
+
+byte drn_enable;
+unsigned int runtime;  
+unsigned int ontime;
+unsigned int offtime;
+unsigned int  on_current;
+unsigned int  back_emf;
+unsigned int  on_current_max;
+unsigned int  back_emf_min;
+byte on_current_pin;
+byte back_emf_pin;
+unsigned int ticks;
+unsigned int mask_input;
+unsigned int run_state;
+
+const byte mask_input_period = 100 ; // 1 second if pwm loop is 10ms 
 
 void setup() {
 
@@ -180,9 +211,9 @@ void setup() {
   radio.sleep();
 
   pinMode(DRN1, OUTPUT);
-  pinMode(EN1_N, OUTPUT);
+  pinMode(EN1, OUTPUT);
   pinMode(DRN2, OUTPUT);
-  pinMode(EN2_N, OUTPUT);
+  pinMode(EN2, OUTPUT);
   pinMode(LOCK, OUTPUT);
   pinMode(START_STOP_N, INPUT);
   pinMode(AUTO_CLOSE, INPUT_PULLUP);
@@ -190,14 +221,17 @@ void setup() {
   analogReference(DEFAULT);
   
   digitalWrite(DRN1, DRN1_OPEN);
-  digitalWrite(EN1_N, LOW);
+  digitalWrite(EN1,  PWM_OFF);
   digitalWrite(DRN2, DRN2_OPEN);
-  digitalWrite(EN2_N, LOW);
+  digitalWrite(EN2,  PWM_OFF);
   digitalWrite(LOCK, LOCK_LOCKED);
 
   //  radio.sendWithRetry(GATEWAYID, "START", 5);
 
   // radio.sleep();
+  state = STATE_STOPPED;
+  ticks=0;
+  mask_input=0;
 }
 
 /************************** MAIN ***************/
@@ -223,11 +257,170 @@ void loop() {
   }
   
   // digitalWrite(LOCK,digitalRead(START_STOP_N) ^ digitalRead(AUTO_CLOSE)); 
-  digitalWrite(LOCK, digitalRead(AUTO_CLOSE)); 
+
+  ticks++;
+  if (mask_input)
+    {
+      mask_input--;
+    }
   
+  // basic pwm forward routine
+  if (runtime > 0)
+    {
+      // on part of pwm cycle
+      digitalWrite(drn_enable, PWM_ON);
+      delay(ontime);
+      on_current = analogRead(on_current_pin);
+      
+      // off part of pwm cycle
+      digitalWrite(drn_enable, PWM_OFF);
+      delay(1);
+      back_emf = analogRead(back_emf_pin);
+      delay(offtime);
+      
+      runtime--;
+      if ((runtime == 0) || 
+	  ((digitalRead(START_STOP_N) == 0) && (mask_input == 0)) 
+	  //	  || (back_emf < back_emf_min) 
+	  // || (on_current > on_current_max)
+	  )
+	{
+	  update_state();
+	}
+    }
+  else {
+    delay(ontime+offtime+1);
+    if ((digitalRead(START_STOP_N) == 0) && (mask_input == 0))
+      {
+	update_state();
+      }
+  }
 }
 
+const byte SLOW_ONTIME = 2; 
+const byte SLOW_OFFTIME = 7;   // + 1 for stabilize backemf measure 
 
+const byte FAST_ONTIME = 9; 
+const byte FAST_OFFTIME = 0;   // + 1 for stabilize backemf measure 
+
+
+// update the state variables 
+void update_state(void)
+{
+  switch (state)
+    {
+    case STATE_STOPPED :
+      if (digitalRead(START_STOP_N) == 0)
+	{
+	  mask_input = mask_input_period;
+	  if (digitalRead(RUN_DIRECTION) == RUN_FWD)
+	    {
+	      state = STATE_UNLOCK;
+	      runtime = 100;
+	      drn_enable = EN1 ;
+	      on_current_pin = IS1 ;
+	      back_emf_pin = BACKEMF1;
+	      
+	      back_emf_min = 100 ;
+	      on_current_max = 100 ;
+	      digitalWrite(DRN1, 1);
+	      digitalWrite(EN1, PWM_OFF);
+	      digitalWrite(DRN2, 0);
+	      digitalWrite(EN2, PWM_ON);
+	      digitalWrite(LOCK, LOCK_UNLOCK);
+	      
+	    } else {
+	    // RUN_BWD
+	    state = STATE_RUN;
+	    runtime = 400;
+	    drn_enable = EN2 ;
+	    on_current_pin = IS2 ;
+	    back_emf_pin = BACKEMF2;
+	      
+	    back_emf_min = 100 ;
+	    on_current_max = 100 ;
+	    digitalWrite(DRN1, 0);
+	    digitalWrite(EN1, PWM_ON);
+	    digitalWrite(DRN2, 1);
+	    digitalWrite(EN2, PWM_OFF);
+	  }
+	  ontime = SLOW_ONTIME;
+	  offtime = SLOW_OFFTIME;
+	}
+      break;
+
+    case STATE_UNLOCK :
+      digitalWrite(LOCK, LOCK_LOCKED);
+      
+      if ((digitalRead(START_STOP_N) == 0) 
+	  //	  || (back_emf < back_emf_min) 
+	  // || (on_current > on_current_max)
+	  )
+	{
+	  //      sprintf(buff,"%02x %s", NODEID, inbuf);
+	  // result = radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+	  // radio.sleep();
+	  state = STATE_STOPPED;
+	  mask_input = mask_input_period;
+	  digitalWrite(EN1, PWM_OFF);
+	  digitalWrite(EN2, PWM_OFF);
+	  runtime=0;
+	}
+      
+      else {
+	state = STATE_RUN;
+	runtime = 300;
+      }      
+      break;
+      
+    case STATE_RUN :
+      if ((digitalRead(START_STOP_N) == 0) 
+	  // || (back_emf < back_emf_min) 
+	  // || (on_current > on_current_max)
+	  )
+	{
+	  state = STATE_STOPPED;
+	  mask_input = mask_input_period;
+	  digitalWrite(EN1, PWM_OFF);
+	  digitalWrite(EN2, PWM_OFF);
+	  runtime=0;
+	}
+      
+      else {
+	state = STATE_RUN_SLOW;
+	ontime = FAST_ONTIME;
+	offtime = FAST_OFFTIME;
+	runtime = 500;
+      }      
+      break;
+
+    case STATE_RUN_SLOW :
+      if ((digitalRead(START_STOP_N) == 0) 
+	  // || (back_emf < back_emf_min) 
+	  // || (on_current > on_current_max)
+	  )
+	{
+	  state = STATE_STOPPED;
+	  mask_input = mask_input_period;
+	  digitalWrite(EN1, PWM_OFF);
+	  digitalWrite(EN2, PWM_OFF);
+	  runtime=0;
+	}
+      
+      else {
+	state = STATE_STOPPED;
+	runtime = 500;
+	ontime = SLOW_ONTIME;
+	offtime = SLOW_OFFTIME;
+      }      
+      break;
+    }
+}
+  
+      
+	      
+	      
+  
 void Blink(byte pin)
 {
   pinMode(pin, OUTPUT);
