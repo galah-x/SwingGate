@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-01-28 16:39:00 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-01-28 18:25:42 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -157,7 +157,7 @@ SPIFlash flash(FLASH_SS, 0xEF30);
 
 const byte ANA_FILTER_TERMS = 4;
 const unsigned int  bemf_min_val = 1500; // 300*5
-const unsigned int  current_max_val = 4500; // 900*5
+const unsigned int  current_max_val = 1000; // 200*5
 const unsigned int bemf_init_val = 500;
 const unsigned int current_init_val = 0;
 unsigned int bemf[ANA_FILTER_TERMS];
@@ -196,6 +196,8 @@ unsigned int ontime;
 unsigned int offtime;
 unsigned int  on_current;
 unsigned int  back_emf;
+unsigned int  biggest_on_current_seen;
+unsigned int  smallest_back_emf_seen;
 unsigned int  on_current_max;
 unsigned int  back_emf_min;
 byte on_current_pin;
@@ -279,7 +281,6 @@ void loop() {
       for (i=0; i < ANA_FILTER_TERMS; i++) {
 	on_current += is[i];
       }
-      
       // off part of pwm cycle
       digitalWrite(drn_enable, PWM_OFF);
       delay(1);
@@ -291,6 +292,19 @@ void loop() {
       for (i=0; i < ANA_FILTER_TERMS; i++) {
 	back_emf += bemf[i];
       }
+      // peak detect the problem values. Skip the basic initial acceleration from stopped phase, which is just a second long
+      if (state != STATE_UNLOCK)
+	{
+	  if (on_current > biggest_on_current_seen)
+	    {
+	      biggest_on_current_seen = on_current;
+	    }
+	  
+	  if (back_emf < smallest_back_emf_seen)
+	    {
+	      smallest_back_emf_seen = back_emf;
+	    }
+	}
       if (filt_pointer == (ANA_FILTER_TERMS -1) )
 	{
 	  filt_pointer = 0;
@@ -371,7 +385,9 @@ void update_timed_state(void)
     case STATE_TO_STOP :
       state = STATE_STOPPED;
       runtime = 0;
-      sprintf(buff,"%02x to_stop %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+      sprintf(buff,"%02x minBEMF %d (%d) maxI %d (%d)", NODEID,
+	      smallest_back_emf_seen, back_emf_min,
+	      biggest_on_current_seen, on_current_max);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       delay(100);
       batt_adc =  analogRead(BATT_ADC);
@@ -401,6 +417,8 @@ void update_error_state(void)
 	      drn_enable = EN1 ;
 	      on_current_pin = IS1 ;
 	      back_emf_pin = BACKEMF1;
+	      biggest_on_current_seen = 0;
+	      smallest_back_emf_seen  = -1;
 	      
 	      back_emf_min = bemf_min_val ;
 	      on_current_max = current_max_val ;
