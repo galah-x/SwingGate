@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-01-28 14:07:19 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-01-28 16:39:00 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -106,8 +106,8 @@ const byte DRN2     = 6;  // direction pin for IBT_2 H bridge for swing motor se
 const byte EN2      = 5;  // pwn/enable for  IBT_2 H bridge for swing motor second side
 const byte IS1      = A5; // current sense for IBT_2 H bridge for swing motor first side
 const byte IS2      = A4; // current sense for IBT_2 H bridge for swing motor second side
-const byte BACKEMF1 = A7; // sense motor backemf when freewheeling, 
-const byte BACKEMF2 = A6; // sense motor backemf when freewheeling, 
+const byte BACKEMF2 = A7; // sense motor backemf when freewheeling, 
+const byte BACKEMF1 = A6; // sense motor backemf when freewheeling, 
 
 // these are the IOs used for the swing gate lock (unlocker)
 const byte LOCK     = 9;  // its the enable pin for the paralleled 2x2A L298 H bridge, used as a protected NFET.
@@ -155,6 +155,14 @@ char buff2[10]; //this is just an empty string used for float conversions
 RFM69 radio;
 SPIFlash flash(FLASH_SS, 0xEF30);
 
+const byte ANA_FILTER_TERMS = 4;
+const unsigned int  bemf_min_val = 1500; // 300*5
+const unsigned int  current_max_val = 4500; // 900*5
+const unsigned int bemf_init_val = 500;
+const unsigned int current_init_val = 0;
+unsigned int bemf[ANA_FILTER_TERMS];
+unsigned int is[ANA_FILTER_TERMS];
+byte filt_pointer = 0;
 
 byte state;
 
@@ -171,8 +179,10 @@ byte state;
 // play with DC motor to get started
 const byte STATE_STOPPED = 100;
 const byte STATE_UNLOCK  = 101;
-const byte STATE_RUN = 102;
-const byte STATE_RUN_SLOW = 105;
+const byte STATE_ACCEL = 102;
+const byte STATE_RUN = 103;
+const byte STATE_RUN_SLOW = 104;
+const byte STATE_TO_STOP = 105;
 
 
 
@@ -232,28 +242,19 @@ void setup() {
   state = STATE_STOPPED;
   ticks=0;
   mask_input=0;
+  filt_pointer = 0;
 }
 
 /************************** MAIN ***************/
 
 
 void loop() {
-  byte light_lvl;
   unsigned int batt_adc;
   float batt_v;
-  
-  
+  byte i;
   if (0) {
     // do a batt voltage update about once per day
     // do a few adc reads to let is settle. Use the last one
-    batt_adc =  analogRead(BATT_ADC);
-    batt_v = BATT_GAIN * batt_adc; 
-    dtostrf(batt_v, 5, 2, buff2);
-    sprintf(buff, "%02x Batt=%sV", NODEID, buff2  );  
-    radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-    
-    delay(50);
-    radio.sleep();
   }
   
   // digitalWrite(LOCK,digitalRead(START_STOP_N) ^ digitalRead(AUTO_CLOSE)); 
@@ -270,43 +271,123 @@ void loop() {
       // on part of pwm cycle
       digitalWrite(drn_enable, PWM_ON);
       delay(ontime);
-      on_current = analogRead(on_current_pin);
+      // implement running average filter... read oldest
+      on_current = is[filt_pointer];
+      // replace oldest with new term
+      is[filt_pointer] = analogRead(on_current_pin); 
+      // sum all the stored terms. don't bother to average, scale the limit.
+      for (i=0; i < ANA_FILTER_TERMS; i++) {
+	on_current += is[i];
+      }
       
       // off part of pwm cycle
       digitalWrite(drn_enable, PWM_OFF);
       delay(1);
-      back_emf = analogRead(back_emf_pin);
+      // implement running average filter... read oldest
+      back_emf = bemf[filt_pointer];
+      // replace oldest with new term
+      bemf[filt_pointer] = analogRead(back_emf_pin);      
+      // sum all the stored terms. don't bother to average, scale the limit.
+      for (i=0; i < ANA_FILTER_TERMS; i++) {
+	back_emf += bemf[i];
+      }
+      if (filt_pointer == (ANA_FILTER_TERMS -1) )
+	{
+	  filt_pointer = 0;
+	} else {
+	filt_pointer++;
+      }
       delay(offtime);
       
       runtime--;
-      if ((runtime == 0) || 
-	  ((digitalRead(START_STOP_N) == 0) && (mask_input == 0)) 
-	  //	  || (back_emf < back_emf_min) 
-	  // || (on_current > on_current_max)
-	  )
+      if (runtime == 0) {
+	update_timed_state();
+      }
+      if  (((digitalRead(START_STOP_N) == 0) && (mask_input == 0)) 
+	   || ((back_emf < back_emf_min) && (state != STATE_UNLOCK)) 
+	   || ((on_current > on_current_max) && (state != STATE_UNLOCK)) 
+	   )
 	{
-	  update_state();
+	  update_error_state();
 	}
     }
-  else {
-    delay(ontime+offtime+1);
-    if ((digitalRead(START_STOP_N) == 0) && (mask_input == 0))
-      {
-	update_state();
-      }
-  }
+  else
+    {
+      delay(ontime+offtime+1);
+      if ((digitalRead(START_STOP_N) == 0) && (mask_input == 0))
+	{
+	  update_error_state();
+	}
+    }
 }
 
 const byte SLOW_ONTIME = 2; 
 const byte SLOW_OFFTIME = 7;   // + 1 for stabilize backemf measure 
+
+const byte MED_ONTIME = 6; 
+const byte MED_OFFTIME = 3;   // + 1 for stabilize backemf measure 
 
 const byte FAST_ONTIME = 9; 
 const byte FAST_OFFTIME = 0;   // + 1 for stabilize backemf measure 
 
 
 // update the state variables 
-void update_state(void)
+void update_timed_state(void)
 {
+  unsigned int batt_adc;
+  float batt_v;
+  switch (state)
+    {
+    case STATE_STOPPED :
+      break;
+
+    case STATE_UNLOCK :
+      digitalWrite(LOCK, LOCK_LOCKED);
+      state = STATE_ACCEL;
+      runtime = 300;
+      break;
+      
+    case STATE_ACCEL :
+      state = STATE_RUN;
+      ontime = MED_ONTIME;
+      offtime = MED_OFFTIME;
+      runtime = 50;
+      break;
+
+    case STATE_RUN :
+      state = STATE_RUN_SLOW;
+      ontime = FAST_ONTIME;
+      offtime = FAST_OFFTIME;
+      runtime = 500;
+      break;
+
+    case STATE_RUN_SLOW :
+      state = STATE_TO_STOP;
+      runtime = 500;
+      ontime = SLOW_ONTIME;
+      offtime = SLOW_OFFTIME;
+      break;
+    
+    case STATE_TO_STOP :
+      state = STATE_STOPPED;
+      runtime = 0;
+      sprintf(buff,"%02x to_stop %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+      radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+      delay(100);
+      batt_adc =  analogRead(BATT_ADC);
+      batt_v = BATT_GAIN * batt_adc; 
+      dtostrf(batt_v, 5, 2, buff2);
+      sprintf(buff, "%02x Batt=%sV", NODEID, buff2  );  
+      radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+      radio.sleep();
+      break;
+    }
+}
+
+      
+void update_error_state(void)
+{
+  int i;
   switch (state)
     {
     case STATE_STOPPED :
@@ -321,8 +402,8 @@ void update_state(void)
 	      on_current_pin = IS1 ;
 	      back_emf_pin = BACKEMF1;
 	      
-	      back_emf_min = 100 ;
-	      on_current_max = 100 ;
+	      back_emf_min = bemf_min_val ;
+	      on_current_max = current_max_val ;
 	      digitalWrite(DRN1, 1);
 	      digitalWrite(EN1, PWM_OFF);
 	      digitalWrite(DRN2, 0);
@@ -337,8 +418,8 @@ void update_state(void)
 	    on_current_pin = IS2 ;
 	    back_emf_pin = BACKEMF2;
 	      
-	    back_emf_min = 100 ;
-	    on_current_max = 100 ;
+	    back_emf_min = bemf_min_val ;
+	    on_current_max = current_max_val ;
 	    digitalWrite(DRN1, 0);
 	    digitalWrite(EN1, PWM_ON);
 	    digitalWrite(DRN2, 1);
@@ -346,6 +427,10 @@ void update_state(void)
 	  }
 	  ontime = SLOW_ONTIME;
 	  offtime = SLOW_OFFTIME;
+	  for (i=0; i < ANA_FILTER_TERMS; i++) {
+	    bemf[i] = bemf_init_val;
+	    is[i]   = current_init_val;
+	  }
 	}
       break;
 
@@ -354,31 +439,29 @@ void update_state(void)
       
       if ((digitalRead(START_STOP_N) == 0) 
 	  //	  || (back_emf < back_emf_min) 
-	  // || (on_current > on_current_max)
+	  //      || (on_current > on_current_max)
 	  )
 	{
-	  //      sprintf(buff,"%02x %s", NODEID, inbuf);
-	  // result = radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-	  // radio.sleep();
+	  sprintf(buff,"%02x unlock %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+	  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+	  radio.sleep();
 	  state = STATE_STOPPED;
 	  mask_input = mask_input_period;
 	  digitalWrite(EN1, PWM_OFF);
 	  digitalWrite(EN2, PWM_OFF);
 	  runtime=0;
 	}
-      
-      else {
-	state = STATE_RUN;
-	runtime = 300;
-      }      
       break;
       
-    case STATE_RUN :
+    case STATE_ACCEL :
       if ((digitalRead(START_STOP_N) == 0) 
-	  // || (back_emf < back_emf_min) 
-	  // || (on_current > on_current_max)
+	  || (back_emf < back_emf_min) 
+	  || (on_current > on_current_max)
 	  )
 	{
+	  sprintf(buff,"%02x accel %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+	  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+	  radio.sleep();
 	  state = STATE_STOPPED;
 	  mask_input = mask_input_period;
 	  digitalWrite(EN1, PWM_OFF);
@@ -386,18 +469,46 @@ void update_state(void)
 	  runtime=0;
 	}
       
-      else {
-	state = STATE_RUN_SLOW;
-	ontime = FAST_ONTIME;
-	offtime = FAST_OFFTIME;
-	runtime = 500;
-      }      
+      break;
+    case STATE_RUN :
+      if ((digitalRead(START_STOP_N) == 0) 
+	  || (back_emf < back_emf_min) 
+	  || (on_current > on_current_max)
+	  )
+	{
+	  sprintf(buff,"%02x run %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+	  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+	  radio.sleep();
+	  state = STATE_STOPPED;
+	  mask_input = mask_input_period;
+	  digitalWrite(EN1, PWM_OFF);
+	  digitalWrite(EN2, PWM_OFF);
+	  runtime=0;
+	}
+      
       break;
 
     case STATE_RUN_SLOW :
       if ((digitalRead(START_STOP_N) == 0) 
-	  // || (back_emf < back_emf_min) 
-	  // || (on_current > on_current_max)
+	  || (back_emf < back_emf_min) 
+	  || (on_current > on_current_max)
+	  )
+	{
+	  sprintf(buff,"%02x run slow %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+	  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+	  radio.sleep();
+	  state = STATE_STOPPED;
+	  mask_input = mask_input_period;
+	  digitalWrite(EN1, PWM_OFF);
+	  digitalWrite(EN2, PWM_OFF);
+	  runtime=0;
+	}
+      break;
+    
+    case STATE_TO_STOP :
+      if ((digitalRead(START_STOP_N) == 0) 
+	  || (back_emf < back_emf_min) 
+	  || (on_current > on_current_max)
 	  )
 	{
 	  state = STATE_STOPPED;
@@ -407,12 +518,10 @@ void update_state(void)
 	  runtime=0;
 	}
       
-      else {
-	state = STATE_STOPPED;
-	runtime = 500;
-	ontime = SLOW_ONTIME;
-	offtime = SLOW_OFFTIME;
-      }      
+      sprintf(buff,"%02x to_stop %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+      radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+
+      radio.sleep();
       break;
     }
 }
