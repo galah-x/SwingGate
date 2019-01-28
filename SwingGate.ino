@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-01-28 18:25:42 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-01-28 18:37:38 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -179,10 +179,11 @@ byte state;
 // play with DC motor to get started
 const byte STATE_STOPPED = 100;
 const byte STATE_UNLOCK  = 101;
-const byte STATE_ACCEL = 102;
-const byte STATE_RUN = 103;
-const byte STATE_RUN_SLOW = 104;
-const byte STATE_TO_STOP = 105;
+const byte STATE_BWD_START = 102;
+const byte STATE_ACCEL = 103;
+const byte STATE_RUN = 104;
+const byte STATE_RUN_SLOW = 105;
+const byte STATE_TO_STOP = 106;
 
 
 
@@ -293,7 +294,7 @@ void loop() {
 	back_emf += bemf[i];
       }
       // peak detect the problem values. Skip the basic initial acceleration from stopped phase, which is just a second long
-      if (state != STATE_UNLOCK)
+      if (!((state == STATE_UNLOCK) || (state == STATE_BWD_START)))
 	{
 	  if (on_current > biggest_on_current_seen)
 	    {
@@ -317,9 +318,9 @@ void loop() {
       if (runtime == 0) {
 	update_timed_state();
       }
-      if  (((digitalRead(START_STOP_N) == 0) && (mask_input == 0)) 
-	   || ((back_emf < back_emf_min) && (state != STATE_UNLOCK)) 
-	   || ((on_current > on_current_max) && (state != STATE_UNLOCK)) 
+      if  (((digitalRead(START_STOP_N) == 0) && (mask_input == 0))
+	   && (!((state != STATE_UNLOCK) ||  (state != STATE_BWD_START))  
+	       && ((back_emf < back_emf_min) || (on_current > on_current_max)))
 	   )
 	{
 	  update_error_state();
@@ -356,6 +357,12 @@ void update_timed_state(void)
       break;
 
     case STATE_UNLOCK :
+      digitalWrite(LOCK, LOCK_LOCKED);
+      state = STATE_ACCEL;
+      runtime = 300;
+      break;
+      
+    case STATE_BWD_START :
       digitalWrite(LOCK, LOCK_LOCKED);
       state = STATE_ACCEL;
       runtime = 300;
@@ -430,8 +437,8 @@ void update_error_state(void)
 	      
 	    } else {
 	    // RUN_BWD
-	    state = STATE_RUN;
-	    runtime = 400;
+	    state = STATE_BWD_START;
+	    runtime = 100;
 	    drn_enable = EN2 ;
 	    on_current_pin = IS2 ;
 	    back_emf_pin = BACKEMF2;
@@ -461,6 +468,23 @@ void update_error_state(void)
 	  )
 	{
 	  sprintf(buff,"%02x unlock %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+	  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+	  radio.sleep();
+	  state = STATE_STOPPED;
+	  mask_input = mask_input_period;
+	  digitalWrite(EN1, PWM_OFF);
+	  digitalWrite(EN2, PWM_OFF);
+	  runtime=0;
+	}
+      break;
+      
+    case STATE_BWD_START :
+      if ((digitalRead(START_STOP_N) == 0) 
+	  //	  || (back_emf < back_emf_min) 
+	  //      || (on_current > on_current_max)
+	  )
+	{
+	  sprintf(buff,"%02x bwd start %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
 	  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
 	  radio.sleep();
 	  state = STATE_STOPPED;
