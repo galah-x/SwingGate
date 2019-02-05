@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-01-28 18:37:38 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 16:27:13 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -11,46 +11,6 @@
 // interface to a pushbutton  (radio remotes bang a relay as the PB)
 // and a toggle switch controlling whether to autoclose or not, how hard can it be?
 
-// Sample RFM69 sender/node sketch for the SonarMote - Distance tracker
-// Can be used for inventory control - ex to measure distance in a multi lane cigarette pack rack
-// http://lowpowerlab.com/sonarmote
-// Ultrasonic sensor (HC-SR04) connected to D6 (Trig), D7 (Echo), and power enabled through D5
-// This sketch sleeps the Moteino and sensor most of the time. It wakes up every few seconds to take
-//   a distance reading. If it detects an approaching object (car) it increases the sampling rate
-//   and starts lighting up the LED (from green to yellow to red to blinking red). Once there is no more
-//   motion the LED is turned off and the cycle is back to a few seconds in between sensor reads.
-// Button is connected on D3. Holding the button for a few seconds enters the "red zone adjust" mode (RZA).
-//   By default the red zone limit is at 25cm (LED turns RED below this and starts blinking faster and faster).
-//   In RZA, readings are taken for 5 seconds. In this time you have the chance to set a new red zone limit.
-//   Valid new red zone readings are between the RED__LIMIT_UPPER (default 25cm) and MAX_ADJUST_DISTANCE (cm).
-//   In RZA mode the BLU Led blinks fast to indicate new red limit distance. It blinks slow if the readings are invalid
-//   If desired this value could be saved to EEPROM to persist if unit is turned off
-// Get the RFM69 at: https://github.com/LowPowerLab/
-// Make sure you adjust the settings in the configuration section below !!!
-
-// **********************************************************************************
-// Copyright Felix Rusu 2016, http://www.LowPowerLab.com/contact
-// **********************************************************************************
-// License
-// **********************************************************************************
-// This program is free software; you can redistribute it 
-// and/or modify it under the terms of the GNU General    
-// Public License as published by the Free Software       
-// Foundation; either version 3 of the License, or        
-// (at your option) any later version.                    
-//                                                        
-// This program is distributed in the hope that it will   
-// be useful, but WITHOUT ANY WARRANTY; without even the  
-// implied warranty of MERCHANTABILITY or FITNESS FOR A   
-// PARTICULAR PURPOSE. See the GNU General Public        
-// License for more details.                              
-//                                                        
-// Licence can be viewed at                               
-// http://www.gnu.org/licenses/gpl-3.0.txt
-//
-// Please maintain this license information along with authorship
-// and copyright notices in any redistribution of this code
-// **********************************************************************************
 #include <RFM69.h>    //get it here: https://www.github.com/lowpowerlab/rfm69
 #include <SPI.h>      //included with Arduino IDE (www.arduino.cc)
 #include <LowPower.h> //get library from: https://github.com/lowpowerlab/lowpower
@@ -64,31 +24,11 @@
 #define NODEID        9    //unique for each node on same network
 #define GATEWAYID     1    //node Id of the receiver we are sending data to
 #define NETWORKID     100  //the same on all nodes that talk to each other including this node and the gateway
-#define TAPID         4    //the TAP channel, dfor the posted off
 #define FREQUENCY     RF69_915MHZ //others: RF69_433MHZ, RF69_868MHZ (this must match the RFM69 freq you have on your Moteino)
 #define IS_RFM69HW_HCW  //uncomment only for RFM69HW/HCW! Leave out if you have RFM69W/CW!
 // #define USE_ENCRYP
 #define ENCRYPTKEY    "sampleEncryptKey" //exactly the same 16 characters/bytes on all nodes!
-//#define SENDLOOPS    80 //default:80 //if no message was sent for this many sleep loops/cycles, then force a send
-//#define READ_SAMPLES 3
-//#define HYSTERESIS   1.3  //(cm) only send a message when new reading is this many centimeters different
-//#define HYSTERESIS   0  //(cm) only send a message when new reading is this many centimeters different
-//#define DIST_READ_LOOPS 2 //read distance every this many sleeping loops (ie if sleep time is 8s then 2 loops => a read occurs every 16s)
-//*********************************************************************************************
-// #define BUZZER_ENABLE  //uncomment this line if you have the BUZZER soldered and want the sketch to make sounds
-// #define SERIAL_EN      //uncomment if you want serial debugging output
 
-#define CHECK_BATTERY
-
-//*********************************************************************************************
-#define SLEEP_FASTEST SLEEP_15MS
-#define SLEEP_FAST SLEEP_250MS
-#define SLEEP_SEC SLEEP_1S
-#define SLEEP_LONG SLEEP_2S
-#define SLEEP_LONGER SLEEP_4S
-#define SLEEP_LONGEST SLEEP_8S
-period_t sleepTime = SLEEP_LONGEST; //period_t is an enum type defined in the LowPower library (LowPower.h)
-//period_t sleepTime = SLEEP_2S; //period_t is an enum type defined in the LowPower library (LowPower.h)
 //*********************************************************************************************
 #ifdef __AVR_ATmega1284P__
 #define LED           15 // Moteino MEGAs have LEDs on D15
@@ -161,37 +101,45 @@ const unsigned int  current_max_val = 1000; // 200*5
 const unsigned int bemf_init_val = 500;
 const unsigned int current_init_val = 0;
 unsigned int bemf[ANA_FILTER_TERMS];
-unsigned int is[ANA_FILTER_TERMS];
+unsigned int im[ANA_FILTER_TERMS];
 byte filt_pointer = 0;
+
+// which way is the motor currently moving / moved last time
+byte last_drn;
+const byte DRN_CLOSING = 0;
+const byte DRN_OPENING = 1;
+
+// is the gate closed?
+byte closed;
+const byte IS_CLOSED = 1;
+const byte NOT_CLOSED = 0;
+
+// did someone hit the button except to start it initially.
+byte buttoned;
+const byte MANUAL = 1;
+const byte AUTO = 0;
 
 byte state;
 
-#define STATE_CLOSED           0
-#define STATE_OPENING_START    1
-#define STATE_OPENING_TRAVERSE 2
-#define STATE_OPENING_ENDING   3
-#define STATE_OPEN             4
-#define STATE_CLOSING_START    5
-#define STATE_CLOSING_TRAVERSE 6
-#define STATE_CLOSING_ENDING   7
-#define STATE_UNKNOWN          8
+// controlls motion
+const byte STATE_STOPPED      = 0;
+const byte STATE_START        = 1;
+const byte STATE_ACCEL        = 2;
+const byte STATE_RUN          = 3;
+const byte STATE_RUN_SLOW     = 4;
+const byte STATE_MISSED_LIMIT = 5;
 
-// play with DC motor to get started
-const byte STATE_STOPPED = 100;
-const byte STATE_UNLOCK  = 101;
-const byte STATE_BWD_START = 102;
-const byte STATE_ACCEL = 103;
-const byte STATE_RUN = 104;
-const byte STATE_RUN_SLOW = 105;
-const byte STATE_TO_STOP = 106;
-
-
+const int min_ticks_in_final_traverse = 300; // 3 secs
+const int max_ticks_in_final_traverse = 500; // 5 secs
+const int tick_shift = 2;  // ie gain of 4, less than 4.5 from the PWM terms. 
+const int idle_ticks_auto_close = 3000; // 30 seconds.
 
 int traverse_runtime;
 int start_runtime;
 int end_runtime;
 
 byte drn_enable;
+unsigned int run_runtime;
 unsigned int runtime;  
 unsigned int ontime;
 unsigned int offtime;
@@ -204,10 +152,22 @@ unsigned int  back_emf_min;
 byte on_current_pin;
 byte back_emf_pin;
 unsigned int ticks;
-unsigned int mask_input;
-unsigned int run_state;
+unsigned int debounce_button;
 
-const byte mask_input_period = 100 ; // 1 second if pwm loop is 10ms 
+
+const byte debounce_button_period = 100 ; // 1 second if pwm loop is 10ms 
+
+const byte SLOW_ONTIME  = 2; 
+const byte SLOW_OFFTIME = 7;   // + 1 for stabilize backemf measure 
+
+const byte MED_ONTIME   = 6; 
+const byte MED_OFFTIME  = 3;   // + 1 for stabilize backemf measure 
+
+const byte FAST_ONTIME  = 9; 
+const byte FAST_OFFTIME = 0;   // + 1 for stabilize backemf measure 
+
+
+
 
 void setup() {
 
@@ -243,9 +203,13 @@ void setup() {
 
   // radio.sleep();
   state = STATE_STOPPED;
+  last_drn = DRN_CLOSING;
   ticks=0;
-  mask_input=0;
+  debounce_button=0;
   filt_pointer = 0;
+  closed = IS_CLOSED;
+  run_runtime = 0;
+  buttoned = AUTO;
 }
 
 /************************** MAIN ***************/
@@ -263,24 +227,24 @@ void loop() {
   // digitalWrite(LOCK,digitalRead(START_STOP_N) ^ digitalRead(AUTO_CLOSE)); 
 
   ticks++;
-  if (mask_input)
+  if (debounce_button)
     {
-      mask_input--;
+      debounce_button--;
     }
   
-  // basic pwm forward routine
+  // basic pwm routine
   if (runtime > 0)
     {
       // on part of pwm cycle
       digitalWrite(drn_enable, PWM_ON);
       delay(ontime);
-      // implement running average filter... read oldest
-      on_current = is[filt_pointer];
+      // implement running average on_current filter... read oldest
+      on_current = im[filt_pointer];
       // replace oldest with new term
-      is[filt_pointer] = analogRead(on_current_pin); 
-      // sum all the stored terms. don't bother to average, scale the limit.
+      im[filt_pointer] = analogRead(on_current_pin); 
+      // sum all the stored terms. Skip the average divide by scaling the limit.
       for (i=0; i < ANA_FILTER_TERMS; i++) {
-	on_current += is[i];
+	on_current += im[i];
       }
       // off part of pwm cycle
       digitalWrite(drn_enable, PWM_OFF);
@@ -293,8 +257,9 @@ void loop() {
       for (i=0; i < ANA_FILTER_TERMS; i++) {
 	back_emf += bemf[i];
       }
-      // peak detect the problem values. Skip the basic initial acceleration from stopped phase, which is just a second long
-      if (!((state == STATE_UNLOCK) || (state == STATE_BWD_START)))
+      //  Skip the basic initial acceleration from stopped phase, which is just a second long
+      // calculate limit values
+      if ( state != STATE_START)
 	{
 	  if (on_current > biggest_on_current_seen)
 	    {
@@ -309,41 +274,55 @@ void loop() {
       if (filt_pointer == (ANA_FILTER_TERMS -1) )
 	{
 	  filt_pointer = 0;
-	} else {
-	filt_pointer++;
-      }
+	}
+      else
+	{
+	  filt_pointer++;
+	}
       delay(offtime);
       
       runtime--;
       if (runtime == 0) {
 	update_timed_state();
       }
-      if  (((digitalRead(START_STOP_N) == 0) && (mask_input == 0))
-	   && (!((state != STATE_UNLOCK) ||  (state != STATE_BWD_START))  
-	       && ((back_emf < back_emf_min) || (on_current > on_current_max)))
+      if  ((digitalRead(START_STOP_N) == 0) && (debounce_button == 0))
+	{
+	  update_button_state();
+	  debounce_button = debounce_button_period;
+	}
+      if  (( state != STATE_START)  
+	   && ((back_emf < back_emf_min) || (on_current > on_current_max))
 	   )
 	{
-	  update_error_state();
+	  update_motor_state();
 	}
     }
   else
     {
       delay(ontime+offtime+1);
-      if ((digitalRead(START_STOP_N) == 0) && (mask_input == 0))
+      if ((digitalRead(START_STOP_N) == 0) && (debounce_button == 0))
 	{
-	  update_error_state();
+	  update_button_state();
+	  debounce_button = debounce_button_period;
+	}
+      if (ticks > idle_ticks_auto_close)
+	{
+	  ticks=0;
+
+	  if ((digitalRead(AUTO_CLOSE)==1)  && (closed == NOT_CLOSED) && (buttoned==AUTO))
+	    {
+	      now_closing();
+	      state = STATE_START;
+	      runtime = 100;
+	      // init the running average filters
+	      for (i=0; i < ANA_FILTER_TERMS; i++) {
+		bemf[i] = bemf_init_val;
+		im[i]   = current_init_val;
+	      }
+	    }   
 	}
     }
 }
-
-const byte SLOW_ONTIME = 2; 
-const byte SLOW_OFFTIME = 7;   // + 1 for stabilize backemf measure 
-
-const byte MED_ONTIME = 6; 
-const byte MED_OFFTIME = 3;   // + 1 for stabilize backemf measure 
-
-const byte FAST_ONTIME = 9; 
-const byte FAST_OFFTIME = 0;   // + 1 for stabilize backemf measure 
 
 
 // update the state variables 
@@ -356,16 +335,17 @@ void update_timed_state(void)
     case STATE_STOPPED :
       break;
 
-    case STATE_UNLOCK :
+    case STATE_START :
       digitalWrite(LOCK, LOCK_LOCKED);
-      state = STATE_ACCEL;
-      runtime = 300;
-      break;
-      
-    case STATE_BWD_START :
-      digitalWrite(LOCK, LOCK_LOCKED);
-      state = STATE_ACCEL;
-      runtime = 300;
+      if (run_runtime && (buttoned == AUTO))
+	{
+	  state = STATE_ACCEL;
+	}
+      else
+	{
+	  state = STATE_RUN_SLOW;
+	}
+      runtime = 200;
       break;
       
     case STATE_ACCEL :
@@ -379,204 +359,212 @@ void update_timed_state(void)
       state = STATE_RUN_SLOW;
       ontime = FAST_ONTIME;
       offtime = FAST_OFFTIME;
-      runtime = 500;
+      runtime = run_runtime;
       break;
 
     case STATE_RUN_SLOW :
-      state = STATE_TO_STOP;
-      runtime = 500;
+      ticks = 0;
+      state = STATE_MISSED_LIMIT;
+      runtime = 6000;
       ontime = SLOW_ONTIME;
       offtime = SLOW_OFFTIME;
       break;
     
-    case STATE_TO_STOP :
+      // this is an abnormal exit now
+    case STATE_MISSED_LIMIT :
       state = STATE_STOPPED;
+      stop_motor();
       runtime = 0;
-      sprintf(buff,"%02x minBEMF %d (%d) maxI %d (%d)", NODEID,
+      run_runtime = 0;
+      sprintf(buff,"%02x missed limit minBEMF %d (%d) maxI %d (%d)", NODEID,
 	      smallest_back_emf_seen, back_emf_min,
 	      biggest_on_current_seen, on_current_max);
-      radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-      delay(100);
-      batt_adc =  analogRead(BATT_ADC);
-      batt_v = BATT_GAIN * batt_adc; 
-      dtostrf(batt_v, 5, 2, buff2);
-      sprintf(buff, "%02x Batt=%sV", NODEID, buff2  );  
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       radio.sleep();
       break;
     }
 }
 
+// changes needed...
+// OK redo the direction switch as an auto switch 
+// manage an unknown start case (maybe free as it will jam and hopefully next time is right)
+// OK auto timing for the midrange traverse
+// test bemf does what I hope it will
+// generally make a PB press do something expected, rather than a cancel.
+//   I guess if traversing, stop.
+//   if stopped, traverse slowly in the opposite drection to last time.
       
-void update_error_state(void)
+void update_button_state(void)
 {
   int i;
   switch (state)
     {
     case STATE_STOPPED :
-      if (digitalRead(START_STOP_N) == 0)
-	{
-	  mask_input = mask_input_period;
-	  if (digitalRead(RUN_DIRECTION) == RUN_FWD)
-	    {
-	      state = STATE_UNLOCK;
-	      runtime = 100;
-	      drn_enable = EN1 ;
-	      on_current_pin = IS1 ;
-	      back_emf_pin = BACKEMF1;
-	      biggest_on_current_seen = 0;
-	      smallest_back_emf_seen  = -1;
-	      
-	      back_emf_min = bemf_min_val ;
-	      on_current_max = current_max_val ;
-	      digitalWrite(DRN1, 1);
-	      digitalWrite(EN1, PWM_OFF);
-	      digitalWrite(DRN2, 0);
-	      digitalWrite(EN2, PWM_ON);
-	      digitalWrite(LOCK, LOCK_UNLOCK);
-	      
-	    } else {
-	    // RUN_BWD
-	    state = STATE_BWD_START;
-	    runtime = 100;
-	    drn_enable = EN2 ;
-	    on_current_pin = IS2 ;
-	    back_emf_pin = BACKEMF2;
-	      
-	    back_emf_min = bemf_min_val ;
-	    on_current_max = current_max_val ;
-	    digitalWrite(DRN1, 0);
-	    digitalWrite(EN1, PWM_ON);
-	    digitalWrite(DRN2, 1);
-	    digitalWrite(EN2, PWM_OFF);
-	  }
-	  ontime = SLOW_ONTIME;
-	  offtime = SLOW_OFFTIME;
-	  for (i=0; i < ANA_FILTER_TERMS; i++) {
-	    bemf[i] = bemf_init_val;
-	    is[i]   = current_init_val;
-	  }
-	}
-      break;
-
-    case STATE_UNLOCK :
-      digitalWrite(LOCK, LOCK_LOCKED);
-      
-      if ((digitalRead(START_STOP_N) == 0) 
-	  //	  || (back_emf < back_emf_min) 
-	  //      || (on_current > on_current_max)
-	  )
-	{
-	  sprintf(buff,"%02x unlock %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
-	  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-	  radio.sleep();
-	  state = STATE_STOPPED;
-	  mask_input = mask_input_period;
-	  digitalWrite(EN1, PWM_OFF);
-	  digitalWrite(EN2, PWM_OFF);
-	  runtime=0;
-	}
-      break;
-      
-    case STATE_BWD_START :
-      if ((digitalRead(START_STOP_N) == 0) 
-	  //	  || (back_emf < back_emf_min) 
-	  //      || (on_current > on_current_max)
-	  )
-	{
-	  sprintf(buff,"%02x bwd start %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
-	  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-	  radio.sleep();
-	  state = STATE_STOPPED;
-	  mask_input = mask_input_period;
-	  digitalWrite(EN1, PWM_OFF);
-	  digitalWrite(EN2, PWM_OFF);
-	  runtime=0;
-	}
-      break;
-      
-    case STATE_ACCEL :
-      if ((digitalRead(START_STOP_N) == 0) 
-	  || (back_emf < back_emf_min) 
-	  || (on_current > on_current_max)
-	  )
-	{
-	  sprintf(buff,"%02x accel %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
-	  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-	  radio.sleep();
-	  state = STATE_STOPPED;
-	  mask_input = mask_input_period;
-	  digitalWrite(EN1, PWM_OFF);
-	  digitalWrite(EN2, PWM_OFF);
-	  runtime=0;
-	}
-      
-      break;
-    case STATE_RUN :
-      if ((digitalRead(START_STOP_N) == 0) 
-	  || (back_emf < back_emf_min) 
-	  || (on_current > on_current_max)
-	  )
-	{
-	  sprintf(buff,"%02x run %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
-	  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-	  radio.sleep();
-	  state = STATE_STOPPED;
-	  mask_input = mask_input_period;
-	  digitalWrite(EN1, PWM_OFF);
-	  digitalWrite(EN2, PWM_OFF);
-	  runtime=0;
-	}
-      
-      break;
-
-    case STATE_RUN_SLOW :
-      if ((digitalRead(START_STOP_N) == 0) 
-	  || (back_emf < back_emf_min) 
-	  || (on_current > on_current_max)
-	  )
-	{
-	  sprintf(buff,"%02x run slow %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
-	  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-	  radio.sleep();
-	  state = STATE_STOPPED;
-	  mask_input = mask_input_period;
-	  digitalWrite(EN1, PWM_OFF);
-	  digitalWrite(EN2, PWM_OFF);
-	  runtime=0;
-	}
-      break;
-    
-    case STATE_TO_STOP :
-      if ((digitalRead(START_STOP_N) == 0) 
-	  || (back_emf < back_emf_min) 
-	  || (on_current > on_current_max)
-	  )
-	{
-	  state = STATE_STOPPED;
-	  mask_input = mask_input_period;
-	  digitalWrite(EN1, PWM_OFF);
-	  digitalWrite(EN2, PWM_OFF);
-	  runtime=0;
-	}
-      
-      sprintf(buff,"%02x to_stop %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+      sprintf(buff,"%02x button start %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-
       radio.sleep();
+      if (closed == IS_CLOSED)
+	{
+	  now_opening();
+	  digitalWrite(LOCK, LOCK_UNLOCK);
+	  buttoned = AUTO;
+	}
+      else
+	{
+	  if (buttoned == MANUAL)
+	    {
+	      if (last_drn == DRN_OPENING)
+		{
+		  now_closing();
+		}
+	      else
+		{
+	      now_opening();
+		}
+	    }
+	  else 
+	    {
+	      // was open 
+	      now_closing();
+	    }
+	}
+      state = STATE_START;
+      runtime = 100;
+      // init the running average filters
+      for (i=0; i < ANA_FILTER_TERMS; i++) {
+	bemf[i] = bemf_init_val;
+	im[i]   = current_init_val;
+      }
+      break;
+
+    case STATE_START :
+    case STATE_ACCEL :
+    case STATE_RUN :
+    case STATE_RUN_SLOW :
+    case STATE_MISSED_LIMIT :
+      
+      sprintf(buff,"%02x button stop %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+      radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+      radio.sleep();
+      state = STATE_STOPPED;
+      buttoned = MANUAL; 
+      stop_motor();
+      runtime=0;
+      closed = NOT_CLOSED;
       break;
     }
 }
-  
-      
-	      
-	      
-  
-void Blink(byte pin)
+
+// entered on stall or overcurrent
+void update_motor_state(void)
 {
-  pinMode(pin, OUTPUT);
-  digitalWrite(pin, HIGH);
-  delay(2);
-  digitalWrite(pin, LOW);
+  int i;
+  switch (state)
+    {
+      
+    case STATE_START :
+    case STATE_ACCEL :
+    case STATE_RUN :
+
+      sprintf(buff,"%02x accel %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+      radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+      radio.sleep();
+      state = STATE_STOPPED;
+      runtime=0;
+      stop_motor();
+      runtime = 0;
+      closed = NOT_CLOSED;
+      buttoned = MANUAL;
+      ticks=0;
+      break;
+
+
+    case STATE_RUN_SLOW :
+      sprintf(buff,"%02x run slow %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+      radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+      radio.sleep();
+      update_runtimes(ticks);
+      buttoned = AUTO;
+      runtime=0;
+      stop_motor();
+      ticks=0;
+      if (last_drn == DRN_CLOSING)
+	{
+	  closed = IS_CLOSED;
+	}
+      else
+	{
+	  closed = NOT_CLOSED;
+	}
+    }
 }
 
+// on successful traverse, get passed the time spent in the final slow traverse.
+// if too small, spend less time in the fast traverse.
+// if too big, , spend more time in the fast traverse.
+// fast traverse is currently 4.5 times as fast as slow traverse.
+// but will fine tune each time
+
+void update_runtimes (int ticks)
+{
+  if (ticks < min_ticks_in_final_traverse)
+    {
+      // bit fast, spend less tim ein fast traverse
+      run_runtime -= (ticks - min_ticks_in_final_traverse) >>  tick_shift;
+    }
+  else
+    {
+      if (ticks > max_ticks_in_final_traverse)
+	{
+	  // bit slow, spend more time in fast traverse
+	  run_runtime += (ticks - max_ticks_in_final_traverse) >>  tick_shift;
+	}
+    }
+}
+
+
+void now_opening (void)
+{
+  drn_enable = EN1 ;
+  on_current_pin = IS1 ;
+  back_emf_pin = BACKEMF1;
+  biggest_on_current_seen = 0;
+  smallest_back_emf_seen  = -1;
+  last_drn = DRN_OPENING;
+  back_emf_min = bemf_min_val ;
+  on_current_max = current_max_val ;
+  ontime = SLOW_ONTIME;
+  offtime = SLOW_OFFTIME;
+  digitalWrite(DRN2, 0);
+  digitalWrite(EN1,  PWM_OFF);
+  digitalWrite(DRN1, 1);
+  digitalWrite(EN2,  PWM_ON);
+}
+
+
+void now_closing (void)
+{
+  // runtime = 100;
+  drn_enable = EN2 ;
+  on_current_pin = IS2 ;
+  back_emf_pin = BACKEMF2;
+  biggest_on_current_seen = 0;
+  smallest_back_emf_seen  = -1;
+  last_drn = DRN_CLOSING;
+  back_emf_min = bemf_min_val ;
+  on_current_max = current_max_val ;
+  ontime = SLOW_ONTIME;
+  offtime = SLOW_OFFTIME;
+  digitalWrite(DRN1, 0);
+  digitalWrite(EN2, PWM_OFF);
+  digitalWrite(EN1, PWM_ON);
+  digitalWrite(DRN2, 1);
+}
+
+void stop_motor (void)
+{
+  digitalWrite(DRN1, 0);
+  digitalWrite(DRN2, 0);
+  digitalWrite(EN1, PWM_OFF);
+  digitalWrite(EN2, PWM_OFF);
+}
