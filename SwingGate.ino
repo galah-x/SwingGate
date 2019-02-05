@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 16:27:13 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 18:00:56 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -96,8 +96,8 @@ RFM69 radio;
 SPIFlash flash(FLASH_SS, 0xEF30);
 
 const byte ANA_FILTER_TERMS = 4;
-const unsigned int  bemf_min_val = 1500; // 300*5
-const unsigned int  current_max_val = 1000; // 200*5
+const unsigned int  bemf_min_val = 1800; // 300*5
+const unsigned int  current_max_val = 600; // 200*5
 const unsigned int bemf_init_val = 500;
 const unsigned int current_init_val = 0;
 unsigned int bemf[ANA_FILTER_TERMS];
