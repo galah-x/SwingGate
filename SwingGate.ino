@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 21:54:55 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 22:06:51 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -346,6 +346,8 @@ void update_timed_state(void)
       if (run_runtime && (buttoned == AUTO))
 	{
 	  state = STATE_ACCEL;
+	  ontime = MED_ONTIME;
+	  offtime = MED_OFFTIME;
 	  runtime = 200;
 	}
       else
@@ -358,15 +360,15 @@ void update_timed_state(void)
       
     case STATE_ACCEL :
       state = STATE_RUN;
-      ontime = MED_ONTIME;
-      offtime = MED_OFFTIME;
+      ontime = FAST_ONTIME;
+      offtime = FAST_OFFTIME;
       runtime = run_runtime;
       break;
 
     case STATE_RUN :
       state = STATE_RUN_SLOW;
-      ontime = FAST_ONTIME;
-      offtime = FAST_OFFTIME;
+      ontime = SLOW_ONTIME;
+      offtime = SLOW_OFFTIME;
       runtime = 30000;
       ticks = 0;
       break;
