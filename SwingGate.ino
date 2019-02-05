@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 20:24:35 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 20:28:55 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -409,6 +409,7 @@ void update_button_state(void)
 	{
 	  now_opening();
 	  digitalWrite(LOCK, LOCK_UNLOCK);
+	  delay(750);
 	  buttoned = AUTO;
 	}
       else
