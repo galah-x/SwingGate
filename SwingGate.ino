@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 21:44:22 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 21:54:55 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -520,6 +520,9 @@ void update_runtimes (int ticks)
   if (ticks < min_ticks_in_final_traverse)
     {
       // bit fast, spend less time in fast traverse
+      sprintf(buff,"%02x fast runtime %d ticks %d", NODEID, run_runtime, ticks);
+      radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+      radio.sleep();
       run_runtime -= ((ticks - min_ticks_in_final_traverse) >>  tick_shift);
     }
   else
@@ -527,6 +530,7 @@ void update_runtimes (int ticks)
       if (ticks > max_ticks_in_final_traverse)
 	{
 	  // bit slow, spend more time in fast traverse
+	  sprintf(buff,"%02x slow runtime %d ticks %d", NODEID, run_runtime, ticks);
 	  run_runtime += ((ticks - max_ticks_in_final_traverse) >>  tick_shift);
 	}
     }
