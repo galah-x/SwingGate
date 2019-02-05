@@ -96,8 +96,10 @@ RFM69 radio;
 SPIFlash flash(FLASH_SS, 0xEF30);
 
 const byte ANA_FILTER_TERMS = 4;
-const unsigned int  bemf_min_val = 1800; // 300*5
-const unsigned int  current_max_val = 600; // 200*5
+const unsigned int  slow_bemf_min_val = 1800; // 300*5
+const unsigned int  slow_current_max_val = 900; // 200*5
+const unsigned int  fast_bemf_min_val = 2500; // 300*5
+const unsigned int  fast_current_max_val = 1300; // 200*5
 const unsigned int bemf_init_val = 500;
 const unsigned int current_init_val = 0;
 unsigned int bemf[ANA_FILTER_TERMS];
@@ -147,8 +149,7 @@ unsigned int  on_current;
 unsigned int  back_emf;
 unsigned int  biggest_on_current_seen;
 unsigned int  smallest_back_emf_seen;
-unsigned int  on_current_max;
-unsigned int  back_emf_min;
+
 byte on_current_pin;
 byte back_emf_pin;
 unsigned int ticks;
@@ -292,8 +293,11 @@ void loop() {
 	  update_button_state();
 	  hide_debounce_button = debounce_button_period;
 	}
-      if  (( state != STATE_START)  
-	   && ((back_emf < back_emf_min) || (on_current > on_current_max))
+      if  (
+	   (( state == STATE_RUN_SLOW)  
+	    && ((back_emf < slow_bemf_min_val) || (on_current > slow_current_max_val))) ||
+	   (( state == STATE_RUN)
+	    && ((back_emf < fast_bemf_min_val) || (on_current > fast_current_max_val)))
 	   )
 	{
 	  update_motor_state();
@@ -305,7 +309,7 @@ void loop() {
       if ((digitalRead(START_STOP_N) == 0) && (hide_debounce_button == 0))
 	{
 	  update_button_state();
-	  hide_debounce_button = debounce_button_period`<;
+	  hide_debounce_button = debounce_button_period;
 	}
       if (ticks > idle_ticks_auto_close)
 	{
@@ -342,26 +346,28 @@ void update_timed_state(void)
       if (run_runtime && (buttoned == AUTO))
 	{
 	  state = STATE_ACCEL;
+	  runtime = 200;
 	}
       else
 	{
 	  state = STATE_RUN_SLOW;
-	}
-      runtime = 200;
+	  runtime = 3000;
+	} 
+      
       break;
       
     case STATE_ACCEL :
       state = STATE_RUN;
       ontime = MED_ONTIME;
       offtime = MED_OFFTIME;
-      runtime = 50;
+      runtime = run_runtime;
       break;
 
     case STATE_RUN :
       state = STATE_RUN_SLOW;
       ontime = FAST_ONTIME;
       offtime = FAST_OFFTIME;
-      runtime = run_runtime;
+      runtime = 30000;
       break;
 
     case STATE_RUN_SLOW :
@@ -379,8 +385,8 @@ void update_timed_state(void)
       runtime = 0;
       run_runtime = 0;
       sprintf(buff,"%02x missed limit minBEMF %d (%d) maxI %d (%d)", NODEID,
-	      smallest_back_emf_seen, back_emf_min,
-	      biggest_on_current_seen, on_current_max);
+	      smallest_back_emf_seen, slow_bemf_min_val,
+	      biggest_on_current_seen, slow_current_max_val);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       radio.sleep();
       break;
@@ -402,7 +408,7 @@ void update_button_state(void)
   switch (state)
     {
     case STATE_STOPPED :
-      sprintf(buff,"%02x button start %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+      sprintf(buff,"%02x button start %d (%d) %d (%d)", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       radio.sleep();
       if (closed == IS_CLOSED)
@@ -446,7 +452,7 @@ void update_button_state(void)
     case STATE_RUN_SLOW :
     case STATE_MISSED_LIMIT :
       
-      sprintf(buff,"%02x button stop %d (%d) %d (%d) %d", NODEID, back_emf, back_emf_min, on_current, on_current_max, state);
+      sprintf(buff,"%02x button stop %d (%d) %d (%d) %d", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val, state);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       radio.sleep();
       state = STATE_STOPPED;
@@ -469,7 +475,7 @@ void update_motor_state(void)
     case STATE_ACCEL :
     case STATE_RUN :
 
-      sprintf(buff,"%02x accel %d (%d) %d (%d) %d %d", NODEID, back_emf, back_emf_min, on_current, on_current_max, state, run_runtime);
+      sprintf(buff,"%02x accel %d (%d) %d (%d) %d %d", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val, state, run_runtime);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       radio.sleep();
       state = STATE_STOPPED;
@@ -484,7 +490,7 @@ void update_motor_state(void)
 
     case STATE_RUN_SLOW :
     case STATE_MISSED_LIMIT :
-      sprintf(buff,"%02x run slow %d (%d) %d (%d) %d %d", NODEID, back_emf, back_emf_min, on_current, on_current_max, state, run_runtime);
+      sprintf(buff,"%02x run slow %d (%d) %d (%d) %d %d", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val, state, run_runtime);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       radio.sleep();
       update_runtimes(ticks);
@@ -535,8 +541,6 @@ void now_opening (void)
   biggest_on_current_seen = 0;
   smallest_back_emf_seen  = 10000;
   last_drn = DRN_OPENING;
-  back_emf_min = bemf_min_val ;
-  on_current_max = current_max_val ;
   ontime = SLOW_ONTIME;
   offtime = SLOW_OFFTIME;
   digitalWrite(DRN2, 0);
@@ -555,8 +559,6 @@ void now_closing (void)
   biggest_on_current_seen = 0;
   smallest_back_emf_seen  = 10000;
   last_drn = DRN_CLOSING;
-  back_emf_min = bemf_min_val ;
-  on_current_max = current_max_val ;
   ontime = SLOW_ONTIME;
   offtime = SLOW_OFFTIME;
   digitalWrite(DRN1, 0);
