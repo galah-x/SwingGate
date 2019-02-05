@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 18:00:56 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 20:24:35 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -152,7 +152,7 @@ unsigned int  back_emf_min;
 byte on_current_pin;
 byte back_emf_pin;
 unsigned int ticks;
-unsigned int debounce_button;
+unsigned int hide_debounce_button;
 
 
 const byte debounce_button_period = 100 ; // 1 second if pwm loop is 10ms 
@@ -205,11 +205,13 @@ void setup() {
   state = STATE_STOPPED;
   last_drn = DRN_CLOSING;
   ticks=0;
-  debounce_button=0;
+  hide_debounce_button=0;
   filt_pointer = 0;
   closed = IS_CLOSED;
   run_runtime = 0;
   buttoned = AUTO;
+  biggest_on_current_seen = 0;
+  smallest_back_emf_seen  = 10000;
 }
 
 /************************** MAIN ***************/
@@ -227,9 +229,9 @@ void loop() {
   // digitalWrite(LOCK,digitalRead(START_STOP_N) ^ digitalRead(AUTO_CLOSE)); 
 
   ticks++;
-  if (debounce_button)
+  if (hide_debounce_button)
     {
-      debounce_button--;
+      hide_debounce_button--;
     }
   
   // basic pwm routine
@@ -285,10 +287,10 @@ void loop() {
       if (runtime == 0) {
 	update_timed_state();
       }
-      if  ((digitalRead(START_STOP_N) == 0) && (debounce_button == 0))
+      if  ((digitalRead(START_STOP_N) == 0) && (hide_debounce_button == 0))
 	{
 	  update_button_state();
-	  debounce_button = debounce_button_period;
+	  hide_debounce_button = debounce_button_period;
 	}
       if  (( state != STATE_START)  
 	   && ((back_emf < back_emf_min) || (on_current > on_current_max))
@@ -300,10 +302,10 @@ void loop() {
   else
     {
       delay(ontime+offtime+1);
-      if ((digitalRead(START_STOP_N) == 0) && (debounce_button == 0))
+      if ((digitalRead(START_STOP_N) == 0) && (hide_debounce_button == 0))
 	{
 	  update_button_state();
-	  debounce_button = debounce_button_period;
+	  hide_debounce_button = debounce_button_period`<;
 	}
       if (ticks > idle_ticks_auto_close)
 	{
@@ -443,7 +445,7 @@ void update_button_state(void)
     case STATE_RUN_SLOW :
     case STATE_MISSED_LIMIT :
       
-      sprintf(buff,"%02x button stop %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+      sprintf(buff,"%02x button stop %d (%d) %d (%d) %d", NODEID, back_emf, back_emf_min, on_current, on_current_max, state);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       radio.sleep();
       state = STATE_STOPPED;
@@ -466,7 +468,7 @@ void update_motor_state(void)
     case STATE_ACCEL :
     case STATE_RUN :
 
-      sprintf(buff,"%02x accel %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+      sprintf(buff,"%02x accel %d (%d) %d (%d) %d %d", NODEID, back_emf, back_emf_min, on_current, on_current_max, state, run_runtime);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       radio.sleep();
       state = STATE_STOPPED;
@@ -480,7 +482,8 @@ void update_motor_state(void)
 
 
     case STATE_RUN_SLOW :
-      sprintf(buff,"%02x run slow %d (%d) %d (%d)", NODEID, back_emf, back_emf_min, on_current, on_current_max);
+    case STATE_MISSED_LIMIT :
+      sprintf(buff,"%02x run slow %d (%d) %d (%d) %d %d", NODEID, back_emf, back_emf_min, on_current, on_current_max, state, run_runtime);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       radio.sleep();
       update_runtimes(ticks);
@@ -529,7 +532,7 @@ void now_opening (void)
   on_current_pin = IS1 ;
   back_emf_pin = BACKEMF1;
   biggest_on_current_seen = 0;
-  smallest_back_emf_seen  = -1;
+  smallest_back_emf_seen  = 10000;
   last_drn = DRN_OPENING;
   back_emf_min = bemf_min_val ;
   on_current_max = current_max_val ;
@@ -549,7 +552,7 @@ void now_closing (void)
   on_current_pin = IS2 ;
   back_emf_pin = BACKEMF2;
   biggest_on_current_seen = 0;
-  smallest_back_emf_seen  = -1;
+  smallest_back_emf_seen  = 10000;
   last_drn = DRN_CLOSING;
   back_emf_min = bemf_min_val ;
   on_current_max = current_max_val ;
