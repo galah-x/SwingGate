@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 20:28:55 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 21:44:22 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -133,7 +133,7 @@ const byte STATE_MISSED_LIMIT = 5;
 
 const int min_ticks_in_final_traverse = 300; // 3 secs
 const int max_ticks_in_final_traverse = 500; // 5 secs
-const int tick_shift = 2;  // ie gain of 4, less than 4.5 from the PWM terms. 
+const int tick_shift = 3;  // ie gain of 4, less than 4.5 from the PWM terms. 
 const int idle_ticks_auto_close = 3000; // 30 seconds.
 
 int traverse_runtime;
@@ -368,10 +368,10 @@ void update_timed_state(void)
       ontime = FAST_ONTIME;
       offtime = FAST_OFFTIME;
       runtime = 30000;
+      ticks = 0;
       break;
 
     case STATE_RUN_SLOW :
-      ticks = 0;
       state = STATE_MISSED_LIMIT;
       runtime = 6000;
       ontime = SLOW_ONTIME;
@@ -519,15 +519,15 @@ void update_runtimes (int ticks)
 {
   if (ticks < min_ticks_in_final_traverse)
     {
-      // bit fast, spend less tim ein fast traverse
-      run_runtime -= (ticks - min_ticks_in_final_traverse) >>  tick_shift;
+      // bit fast, spend less time in fast traverse
+      run_runtime -= ((ticks - min_ticks_in_final_traverse) >>  tick_shift);
     }
   else
     {
       if (ticks > max_ticks_in_final_traverse)
 	{
 	  // bit slow, spend more time in fast traverse
-	  run_runtime += (ticks - max_ticks_in_final_traverse) >>  tick_shift;
+	  run_runtime += ((ticks - max_ticks_in_final_traverse) >>  tick_shift);
 	}
     }
 }
