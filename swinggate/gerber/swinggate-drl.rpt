@@ -1,0 +1,27 @@
+Drill report for /fs/john/projects/arduino/SwingGate/swinggate/swinggate.kicad_pcb
+Created on Mon 11 Feb 2019 07:24:42 AEDT
+
+Copper Layer Stackup:
+    =============================================================
+    L1 :  F.Cu                      front
+    L2 :  B.Cu                      back
+
+
+Drill file 'swinggate-PTH.drl' contains
+    plated through holes:
+    =============================================================
+    T1  0.80mm  0.031"  (63 holes)
+    T2  1.00mm  0.039"  (4 holes)
+    T3  1.20mm  0.047"  (12 holes)
+    T4  1.50mm  0.059"  (4 holes)
+    T5  3.00mm  0.118"  (4 holes)
+    T6  3.20mm  0.126"  (3 holes)
+
+    Total plated holes count 90
+
+
+Drill file 'swinggate-NPTH.drl' contains
+    unplated through holes:
+    =============================================================
+
+    Total unplated holes count 0
