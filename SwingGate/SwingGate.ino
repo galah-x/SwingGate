@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-05 22:06:51 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-11 14:12:48 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -8,8 +8,9 @@
 
 // basically I have to drive an unlock solenoid at about 1.5A for a second or so at start of open
 // and I have to drive a swing linear actuator at run current of a couple of A (~15A stall) 
-// interface to a pushbutton  (radio remotes bang a relay as the PB)
-// and a toggle switch controlling whether to autoclose or not, how hard can it be?
+// interface to a pushbutton  (radio remotes bang a relay pretending to be the PB)
+// and a toggle switch controlling whether to autoclose or not,
+// how hard can it be?
 
 #include <RFM69.h>    //get it here: https://www.github.com/lowpowerlab/rfm69
 #include <SPI.h>      //included with Arduino IDE (www.arduino.cc)
@@ -58,10 +59,6 @@ const byte START_STOP_N = 7;   // active low 'start/stop input pin
 const byte AUTO_CLOSE   = A2;  // if high, autoclose after 30 seconds
 const byte BATT_ADC     = A3;  // analog IO for measuring battery
 
-const byte RUN_DIRECTION = A2;  // for testing simplified motor ver
-const byte RUN_FWD = 1;
-const byte RUN_BWD = 0;
-
 // The general plan for the swing linear actuator is to go slowly for a couple of seconds, then increase to max for main traverse,
 // then slow down again a bit before it reaches the limit. 
 // There is no limit swithch, it finds the limit by measuring motor back-emf. If its stalled, back-emf is low.
@@ -71,7 +68,9 @@ const byte RUN_BWD = 0;
 // I plan to bit bang the PWM so I can synchronize measurement and drive. 100hz should be achievable and adequate.
 //
 // hopefully the first time it runs it can go slow all the way, and automatically figure out how long the fast traverse time
-// should be for subsequent operations. 
+// should be for subsequent operations.
+
+// maybe allow the radio to open a closed gate, and change the autoclose sw state. Probably only when idle. 
 
 #define DRN1_OPEN         1
 #define DRN1_CLOSE        0
@@ -121,15 +120,34 @@ byte buttoned;
 const byte MANUAL = 1;
 const byte AUTO = 0;
 
+byte radio_autoclose;
+byte radio_start;
+
 byte state;
 
-// controlls motion
-const byte STATE_STOPPED      = 0;
-const byte STATE_START        = 1;
-const byte STATE_ACCEL        = 2;
-const byte STATE_RUN          = 3;
-const byte STATE_RUN_SLOW     = 4;
-const byte STATE_MISSED_LIMIT = 5;
+// controls motion
+const byte STATE_STOPPED      = 0;  // not running 
+const byte STATE_REV          = 1;  // get started, slowly, in reverse to let the lock open.
+                                    // Ignore stall currents
+const byte STATE_START        = 2;  // get started, slowly. Ignore stall currents
+const byte STATE_ACCEL        = 3;  // accelerate. higher current limit
+const byte STATE_RUN          = 4;  // middle fast traverse. higher current limit
+const byte STATE_RUN_SLOW     = 5;  // go slowly.  Check current+bemf limys,
+                                    // its intended the limit gets hit in this state
+const byte STATE_MISSED_LIMIT = 6;  // problem, no limit found. timeout to here. 
+
+// in general, from closed, the normal flow was
+// STOPPED --pb--> START --time-> ACCEL --time-> RUN --time-> RUN_SLOW --stalled-> STOPPED 
+// but to make the lock work, I have to take pressure off it by running backwards briefly.
+// STOPPED --pb--> REV --time-> START --time-> ACCEL --time-> RUN --time-> RUN_SLOW --stalled-> STOPPED 
+
+// in general, from open, the normal flow is
+// STOPPED --pb/timeout--> START --time-> ACCEL --time-> RUN --time-> RUN_SLOW --stalled-> STOPPED 
+
+// in general, from confused, the normal flow is
+// STOPPED --pb-->  START --time-> RUN_SLOW --stalled-> STOPPED 
+
+
 
 const int min_ticks_in_final_traverse = 300; // 3 secs
 const int max_ticks_in_final_traverse = 500; // 5 secs
@@ -182,7 +200,7 @@ void setup() {
   radio.encrypt(null);
 #endif
   
-  radio.sleep();
+  //  radio.sleep();
 
   pinMode(DRN1, OUTPUT);
   pinMode(EN1, OUTPUT);
@@ -202,6 +220,9 @@ void setup() {
 
   //  radio.sendWithRetry(GATEWAYID, "START", 5);
 
+  sprintf(buff, "%02x SwingGate 201902111357", NODEID);
+  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+  
   // radio.sleep();
   state = STATE_STOPPED;
   last_drn = DRN_CLOSING;
@@ -213,14 +234,14 @@ void setup() {
   buttoned = AUTO;
   biggest_on_current_seen = 0;
   smallest_back_emf_seen  = 10000;
+  radio_autoclose = 0;
+  radio_start = 0;
 }
 
 /************************** MAIN ***************/
 
 
 void loop() {
-  unsigned int batt_adc;
-  float batt_v;
   byte i;
   if (0) {
     // do a batt voltage update about once per day
@@ -304,18 +325,42 @@ void loop() {
 	}
     }
   else
+    // not running. Check for button press, or an automatic close timeout, or maybe a radio command
     {
-      delay(ontime+offtime+1);
-      if ((digitalRead(START_STOP_N) == 0) && (hide_debounce_button == 0))
+      for (i=0; i < ontime+offtime+1; i++)
+	{
+	  if (radio.receiveDone())
+	    {
+	      CheckForWirelessHEX(radio, flash, true);
+
+	      if  (radio.DATALEN >= 2)
+		{
+		  radio_start     = radio.DATA[0] & 1;
+		  radio_autoclose = radio.DATA[1] & 1;
+		}
+	      if (radio.ACKRequested())
+		{
+		  radio.sendACK();
+		}
+	    }
+	  delay(1);
+	}
+      if ((digitalRead(START_STOP_N) == 0) && (hide_debounce_button == 0) 
+	  || (radio_start == 1)
+	  )
 	{
 	  update_button_state();
 	  hide_debounce_button = debounce_button_period;
+	  radio_start = 0;
 	}
       if (ticks > idle_ticks_auto_close)
 	{
 	  ticks=0;
 
-	  if ((digitalRead(AUTO_CLOSE)==1)  && (closed == NOT_CLOSED) && (buttoned==AUTO))
+	  if (((digitalRead(AUTO_CLOSE)==1) ^ (radio_autoclose == 1))
+	      && (closed == NOT_CLOSED)
+	      && (buttoned==AUTO)
+	      )
 	    {
 	      now_closing();
 	      state = STATE_START;
@@ -339,6 +384,14 @@ void update_timed_state(void)
   switch (state)
     {
     case STATE_STOPPED :
+      break;
+
+    case STATE_REV :
+      now_opening();
+      state = STATE_START;
+      ontime = SLOW_ONTIME;
+      offtime = SLOW_OFFTIME;
+      runtime = 200;
       break;
 
     case STATE_START :
@@ -390,20 +443,17 @@ void update_timed_state(void)
 	      smallest_back_emf_seen, slow_bemf_min_val,
 	      biggest_on_current_seen, slow_current_max_val);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-      radio.sleep();
+      //      radio.sleep();
       break;
     }
 }
 
-// changes needed...
-// OK redo the direction switch as an auto switch 
-// manage an unknown start case (maybe free as it will jam and hopefully next time is right)
-// OK auto timing for the midrange traverse
-// test bemf does what I hope it will
 // generally make a PB press do something expected, rather than a cancel.
 //   I guess if traversing, stop.
 //   if stopped, traverse slowly in the opposite drection to last time.
-      
+
+// this is entered when a button is pressed. It is debounced elsewhere.
+
 void update_button_state(void)
 {
   int i;
@@ -412,13 +462,14 @@ void update_button_state(void)
     case STATE_STOPPED :
       sprintf(buff,"%02x button start %d (%d) %d (%d)", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-      radio.sleep();
+      //      radio.sleep();
       if (closed == IS_CLOSED)
 	{
-	  now_opening();
+	  now_closing();
 	  digitalWrite(LOCK, LOCK_UNLOCK);
-	  delay(750);
 	  buttoned = AUTO;
+	  state = STATE_REV;
+	  runtime = 100;
 	}
       else
 	{
@@ -438,9 +489,9 @@ void update_button_state(void)
 	      // was open 
 	      now_closing();
 	    }
+	  state = STATE_START;
+	  runtime = 100;
 	}
-      state = STATE_START;
-      runtime = 100;
       // init the running average filters
       for (i=0; i < ANA_FILTER_TERMS; i++) {
 	bemf[i] = bemf_init_val;
@@ -456,7 +507,7 @@ void update_button_state(void)
       
       sprintf(buff,"%02x button stop %d (%d) %d (%d) %d", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val, state);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-      radio.sleep();
+      //      radio.sleep();
       state = STATE_STOPPED;
       buttoned = MANUAL; 
       stop_motor();
@@ -470,6 +521,8 @@ void update_button_state(void)
 void update_motor_state(void)
 {
   int i;
+  unsigned int batt_adc;
+  float batt_v;
   switch (state)
     {
       
@@ -479,7 +532,7 @@ void update_motor_state(void)
 
       sprintf(buff,"%02x accel %d (%d) %d (%d) %d %d", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val, state, run_runtime);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-      radio.sleep();
+      //      radio.sleep();
       state = STATE_STOPPED;
       runtime=0;
       stop_motor();
@@ -489,16 +542,25 @@ void update_motor_state(void)
       ticks=0;
       break;
 
-
+      // stall in RUN_SLOW is the desired exit state
+      
     case STATE_RUN_SLOW :
     case STATE_MISSED_LIMIT :
       sprintf(buff,"%02x run slow %d (%d) %d (%d) %d %d", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val, state, run_runtime);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-      radio.sleep();
+      //      radio.sleep();
       update_runtimes(ticks);
       buttoned = AUTO;
       runtime=0;
       stop_motor();
+      
+      delay(100);
+      batt_adc =  analogRead(BATT_ADC);
+      batt_v = BATT_GAIN * batt_adc; 
+      dtostrf(batt_v, 5, 2, buff2);
+      sprintf(buff, "%02x Batt=%sV rt=%d rac=%d ac=%d", NODEID, buff2, run_runtime, radio_autoclose, digitalRead(AUTO_CLOSE)   );  
+      radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+
       ticks=0;
       if (last_drn == DRN_CLOSING)
 	{
@@ -524,7 +586,7 @@ void update_runtimes (int ticks)
       // bit fast, spend less time in fast traverse
       sprintf(buff,"%02x fast runtime %d ticks %d", NODEID, run_runtime, ticks);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-      radio.sleep();
+      //      radio.sleep();
       run_runtime -= ((ticks - min_ticks_in_final_traverse) >>  tick_shift);
     }
   else
@@ -533,6 +595,7 @@ void update_runtimes (int ticks)
 	{
 	  // bit slow, spend more time in fast traverse
 	  sprintf(buff,"%02x slow runtime %d ticks %d", NODEID, run_runtime, ticks);
+	  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
 	  run_runtime += ((ticks - max_ticks_in_final_traverse) >>  tick_shift);
 	}
     }
