@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-02-11 14:12:48 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-03 15:45:59 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -22,7 +22,16 @@
 //*********************************************************************************************
 //************ IMPORTANT SETTINGS - YOU MUST CHANGE/CONFIGURE TO FIT YOUR HARDWARE *************
 //*********************************************************************************************
-#define NODEID        9    //unique for each node on same network
+
+// dont define this for current proto build front gate
+#define BACKGATE
+
+
+#ifndef BACKGATE
+#define NODEID        9    //frontgate unique for each node on same network
+#else 
+#define NODEID        14    // backgate unique for each node on same network
+#endif
 #define GATEWAYID     1    //node Id of the receiver we are sending data to
 #define NETWORKID     100  //the same on all nodes that talk to each other including this node and the gateway
 #define FREQUENCY     RF69_915MHZ //others: RF69_433MHZ, RF69_868MHZ (this must match the RFM69 freq you have on your Moteino)
@@ -39,16 +48,26 @@
 #define FLASH_SS      8
 #endif
 
-// these are the IOs used for the swing gate linear actuator
 
+
+
+// these are the IOs used for the swing gate linear actuator
+// for the prototype
 const byte DRN1     = 4;  // direction pin for IBT_2 H bridge for swing motor first side
 const byte EN1      = 3;  // pwn/enable for  IBT_2 H bridge for swing motor first side
 const byte DRN2     = 6;  // direction pin for IBT_2 H bridge for swing motor second side
 const byte EN2      = 5;  // pwn/enable for  IBT_2 H bridge for swing motor second side
 const byte IS1      = A5; // current sense for IBT_2 H bridge for swing motor first side
 const byte IS2      = A4; // current sense for IBT_2 H bridge for swing motor second side
-const byte BACKEMF2 = A7; // sense motor backemf when freewheeling, 
-const byte BACKEMF1 = A6; // sense motor backemf when freewheeling, 
+
+#ifndef BACKGATE
+ const byte BACKEMF2 = A7; // sense motor backemf when freewheeling, 
+ const byte BACKEMF1 = A6; // sense motor backemf when freewheeling, 
+#else
+// for the r1 PCB
+ const byte BACKEMF2 = A6; // sense motor backemf when freewheeling, 
+ const byte BACKEMF1 = A7; // sense motor backemf when freewheeling, 
+#endif
 
 // these are the IOs used for the swing gate lock (unlocker)
 const byte LOCK     = 9;  // its the enable pin for the paralleled 2x2A L298 H bridge, used as a protected NFET.
@@ -95,12 +114,25 @@ RFM69 radio;
 SPIFlash flash(FLASH_SS, 0xEF30);
 
 const byte ANA_FILTER_TERMS = 4;
+
+#ifdef BACKGATE
+const unsigned int  slow_bemf_min_val = 1500; // 300*5
+const unsigned int  slow_current_max_val = 400; // 200*5
+const unsigned int  fast_bemf_min_val = 2500; // 300*5
+const unsigned int  fast_current_max_val = 1300; // 200*5
+const unsigned int bemf_init_val = 500;
+const unsigned int current_init_val = 0;
+#else 
 const unsigned int  slow_bemf_min_val = 1800; // 300*5
 const unsigned int  slow_current_max_val = 900; // 200*5
 const unsigned int  fast_bemf_min_val = 2500; // 300*5
 const unsigned int  fast_current_max_val = 1300; // 200*5
 const unsigned int bemf_init_val = 500;
 const unsigned int current_init_val = 0;
+#endif
+
+
+
 unsigned int bemf[ANA_FILTER_TERMS];
 unsigned int im[ANA_FILTER_TERMS];
 byte filt_pointer = 0;
@@ -151,7 +183,7 @@ const byte STATE_MISSED_LIMIT = 6;  // problem, no limit found. timeout to here.
 
 const int min_ticks_in_final_traverse = 300; // 3 secs
 const int max_ticks_in_final_traverse = 500; // 5 secs
-const int tick_shift = 3;  // ie gain of 4, less than 4.5 from the PWM terms. 
+const int tick_shift = 3;  // ie gain of 1/8, less than 4.5 from the PWM terms. 
 const int idle_ticks_auto_close = 3000; // 30 seconds.
 
 int traverse_runtime;
@@ -220,7 +252,7 @@ void setup() {
 
   //  radio.sendWithRetry(GATEWAYID, "START", 5);
 
-  sprintf(buff, "%02x SwingGate 201902111357", NODEID);
+  sprintf(buff, "%02x SwingGate 201903011435", NODEID);
   radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
   
   // radio.sleep();
