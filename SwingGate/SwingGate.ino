@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-03 15:45:59 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-07 17:05:51 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -17,6 +17,7 @@
 #include <LowPower.h> //get library from: https://github.com/lowpowerlab/lowpower
                       //writeup here: http://www.rocketscream.com/blog/2011/07/04/lightweight-low-power-arduino-library/
 #include <RFM69_OTA.h>
+#include <EEPROM.h>
 
 
 //*********************************************************************************************
@@ -51,6 +52,9 @@
 
 
 
+
+
+
 // these are the IOs used for the swing gate linear actuator
 // for the prototype
 const byte DRN1     = 4;  // direction pin for IBT_2 H bridge for swing motor first side
@@ -80,7 +84,7 @@ const byte BATT_ADC     = A3;  // analog IO for measuring battery
 
 // The general plan for the swing linear actuator is to go slowly for a couple of seconds, then increase to max for main traverse,
 // then slow down again a bit before it reaches the limit. 
-// There is no limit swithch, it finds the limit by measuring motor back-emf. If its stalled, back-emf is low.
+// There is no limit switch, it finds the limit by measuring motor back-emf. If its stalled, back-emf is low.
 // Back emf is measured by keeping the low side drive enabled, disable the high side, wait a bit,
 // then measure voltage on the high side
 //
@@ -115,21 +119,28 @@ SPIFlash flash(FLASH_SS, 0xEF30);
 
 const byte ANA_FILTER_TERMS = 4;
 
-#ifdef BACKGATE
-const unsigned int  slow_bemf_min_val = 1500; // 300*5
-const unsigned int  slow_current_max_val = 400; // 200*5
-const unsigned int  fast_bemf_min_val = 2500; // 300*5
-const unsigned int  fast_current_max_val = 1300; // 200*5
-const unsigned int bemf_init_val = 500;
-const unsigned int current_init_val = 0;
-#else 
-const unsigned int  slow_bemf_min_val = 1800; // 300*5
-const unsigned int  slow_current_max_val = 900; // 200*5
-const unsigned int  fast_bemf_min_val = 2500; // 300*5
-const unsigned int  fast_current_max_val = 1300; // 200*5
-const unsigned int bemf_init_val = 500;
-const unsigned int current_init_val = 0;
-#endif
+// assign EEPROM addresses
+const byte EEPROM_initialized_loc = 0;
+const byte EEPROM_initialized_val = 0xaa;
+const byte EEPROM_loc_hi_slow_bemf_min = 1;
+const byte EEPROM_loc_lo_slow_bemf_min = 2;
+const byte EEPROM_loc_hi_slow_current_max = 3;
+const byte EEPROM_loc_lo_slow_current_max = 4;
+const byte EEPROM_loc_hi_fast_bemf_min = 5;
+const byte EEPROM_loc_lo_fast_bemf_min = 6;
+const byte EEPROM_loc_hi_fast_current_max = 7;
+const byte EEPROM_loc_lo_fast_current_max = 8;
+const byte EEPROM_loc_hi_bemf_init = 9;
+const byte EEPROM_loc_lo_bemf_init = 10;
+const byte EEPROM_loc_hi_current_init = 11;
+const byte EEPROM_loc_lo_current_init = 12;
+
+unsigned int slow_bemf_min_val;
+unsigned int slow_current_max_val;
+unsigned int fast_bemf_min_val;
+unsigned int fast_current_max_val;
+unsigned int bemf_init_val;
+unsigned int current_init_val;
 
 
 
@@ -220,8 +231,10 @@ const byte FAST_OFFTIME = 0;   // + 1 for stabilize backemf measure
 
 
 
-void setup() {
 
+
+void setup() {
+  
   radio.initialize(FREQUENCY,NODEID,NETWORKID);
 #ifdef IS_RFM69HW_HCW
   radio.setHighPower(); //must include this only for RFM69HW/HCW!
@@ -252,7 +265,7 @@ void setup() {
 
   //  radio.sendWithRetry(GATEWAYID, "START", 5);
 
-  sprintf(buff, "%02x SwingGate 201903011435", NODEID);
+  sprintf(buff, "%02x SwingGate 201903071705", NODEID);
   radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
   
   // radio.sleep();
@@ -268,6 +281,66 @@ void setup() {
   smallest_back_emf_seen  = 10000;
   radio_autoclose = 0;
   radio_start = 0;
+
+  // this bit sets up values in EEROM only in the case eerom in unconfigured
+#ifdef BACKGATE
+  slow_bemf_min_val = 1500; // 300*5
+  slow_current_max_val = 400; // 200*5
+  fast_bemf_min_val = 2500; // 300*5
+  fast_current_max_val = 1300; // 200*5
+  bemf_init_val = 500;
+  current_init_val = 0;
+#else 
+  slow_bemf_min_val = 1800; // 300*5
+  slow_current_max_val = 900; // 200*5
+  fast_bemf_min_val = 2500; // 300*5
+  fast_current_max_val = 1300; // 200*5
+  bemf_init_val = 500;
+  current_init_val = 0;
+#endif
+  
+  if (EEPROM.read(EEPROM_initialized_loc) != EEPROM_initialized_val)
+    {
+      EEPROM.write(EEPROM_initialized_loc, EEPROM_initialized_val);
+      
+      EEPROM.write(EEPROM_loc_hi_slow_bemf_min, (slow_bemf_min_val << 8)) ;
+      EEPROM.write(EEPROM_loc_lo_slow_bemf_min, (slow_bemf_min_val << 8) & 0xff) ;
+
+      EEPROM.write(EEPROM_loc_hi_slow_current_max, (slow_current_max_val << 8)) ;
+      EEPROM.write(EEPROM_loc_lo_slow_current_max, (slow_currend_max_val << 8) & 0xff) ;
+
+      EEPROM.write(EEPROM_loc_hi_fast_bemf_min, (fast_bemf_min_val << 8)) ;
+      EEPROM.write(EEPROM_loc_lo_fast_bemf_min, (fast_bemf_min_val << 8) & 0xff) ;
+
+      EEPROM.write(EEPROM_loc_hi_fast_current_max, (fast_current_max_val << 8)) ;
+      EEPROM.write(EEPROM_loc_lo_fast_current_max, (fast_current_max_val << 8) & 0xff) ;
+
+      EEPROM.write(EEPROM_loc_hi_bemf_init, (bemf_init_val << 8)) ;
+      EEPROM.write(EEPROM_loc_lo_bemf_init, (bemf_init_val << 8) & 0xff) ;
+
+      EEPROM.write(EEPROM_loc_hi_current_init, (current_init_val << 8)) ;
+      EEPROM.write(EEPROM_loc_lo_current_init, (current_init_val << 8) & 0xff) ;
+
+    }
+  // now load from ee now that is configured
+  slow_bemf_min_val = (EEPROM.read(EEPROM_loc_hi_slow_bemf_min) << 8) + 
+    EEPROM.read(EEPROM_loc_lo_slow_bemf_min);
+  
+  slow_current_max_val = (EEPROM.read(EEPROM_loc_hi_slow_current_max) << 8) + 
+    EEPROM.read(EEPROM_loc_lo_slow_current_max);
+  
+  fast_bemf_min_val = (EEPROM.read(EEPROM_loc_hi_fast_bemf_min) << 8) + 
+    EEPROM.read(EEPROM_loc_lo_fast_bemf_min);
+  
+  fast_current_max_val = (EEPROM.read(EEPROM_loc_hi_fast_current_max) << 8) + 
+    EEPROM.read(EEPROM_loc_lo_fast_current_max);
+  
+  bemf_init_val = =(EEPROM.read(EEPROM_loc_hi_bemf_init) << 8) + 
+    EEPROM.read(EEPROM_loc_lo_bemf_init);
+  
+  current_init_val = =(EEPROM.read(EEPROM_loc_hi_current_init) << 8) + 
+    EEPROM.read(EEPROM_loc_lo_current_init);
+
 }
 
 /************************** MAIN ***************/
@@ -275,13 +348,10 @@ void setup() {
 
 void loop() {
   byte i;
-  if (0) {
-    // do a batt voltage update about once per day
-    // do a few adc reads to let is settle. Use the last one
-  }
+  byte address;
+  byte dataval;
+  byte senderid;
   
-  // digitalWrite(LOCK,digitalRead(START_STOP_N) ^ digitalRead(AUTO_CLOSE)); 
-
   ticks++;
   if (hide_debounce_button)
     {
@@ -365,10 +435,24 @@ void loop() {
 	    {
 	      CheckForWirelessHEX(radio, flash, true);
 
-	      if  (radio.DATALEN >= 2)
+	      if  (radio.DATALEN == 2)
 		{
 		  radio_start     = radio.DATA[0] & 1;
 		  radio_autoclose = radio.DATA[1] & 1;
+		}
+	      if  ((radio.DATALEN == 5) && (radio.DATA[0] == 'W')) // Waadd all in hex 
+		{
+		  address = ((radio.DATA[1] & 0x0f) << 4) | (radio.DATA[2] & 0x0f);
+		  dataval = ((radio.DATA[3] & 0x0f) << 4) | (radio.DATA[3] & 0x0f);
+		  EEPROM.write(address,dataval);
+		}
+	      if  ((radio.DATALEN == 3) && (radio.DATA[0] == 'R')) // Waadd all in hex 
+		{
+		  address = ((radio.DATA[1] & 0x0f) << 4) | (radio.DATA[2] & 0x0f);
+		  dataval = EEPROM.read(address);
+		  senderid = radio.SENDERID;
+		  sprintf(buff, "%02x:%02x", address,dataval);
+		  radio.sendWithRetry(senderid, buff, strlen(buff));
 		}
 	      if (radio.ACKRequested())
 		{
