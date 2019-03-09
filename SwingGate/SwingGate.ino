@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-07 17:05:51 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-09 13:15:29 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -335,10 +335,10 @@ void setup() {
   fast_current_max_val = (EEPROM.read(EEPROM_loc_hi_fast_current_max) << 8) + 
     EEPROM.read(EEPROM_loc_lo_fast_current_max);
   
-  bemf_init_val = =(EEPROM.read(EEPROM_loc_hi_bemf_init) << 8) + 
+  bemf_init_val = (EEPROM.read(EEPROM_loc_hi_bemf_init) << 8) + 
     EEPROM.read(EEPROM_loc_lo_bemf_init);
   
-  current_init_val = =(EEPROM.read(EEPROM_loc_hi_current_init) << 8) + 
+  current_init_val = (EEPROM.read(EEPROM_loc_hi_current_init) << 8) + 
     EEPROM.read(EEPROM_loc_lo_current_init);
 
 }
