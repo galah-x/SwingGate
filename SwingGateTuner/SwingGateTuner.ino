@@ -161,13 +161,23 @@ void loop() {
 	      {
 		do_flag();
 	      }
-	    if ((buff[0] == 'W') || (buff[0] == 'R'))
+      if (buff[0] == 'W')
+        {
+    //    sprintf(buff, "sending W %d chars\n", 5);
+     //   Serial.println(buff);
+         radio.sendWithRetry(GATEID, buff, 5);
+        }
+      if (buff[0] == 'R')
+        {
+//        sprintf(buff, "sending R %d chars\n", 3);
+//        Serial.println(buff);
+         radio.sendWithRetry(GATEID, buff, 3);
+        }
+	    if (buff[0] == 'X')
 	      {
-	       radio.sendWithRetry(GATEID, buff, strlen(buff));
-	      }
-	    if (buff[0] == 'X'))
-	      {
-	       radio.sendWithRetry(GATEID, buff+1, strlen(buff)-1);
+  //sprintf(buff, "sendin %d chars", 2);
+  //Serial.println(buff);
+	       radio.sendWithRetry(GATEID, buff+1, 2);
 	      }
 	    
 	    fetching_line = 0;

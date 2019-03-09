@@ -284,8 +284,8 @@ void setup() {
 
   // this bit sets up values in EEROM only in the case eerom in unconfigured
 #ifdef BACKGATE
-  slow_bemf_min_val = 1500; // 300*5
-  slow_current_max_val = 400; // 200*5
+  slow_bemf_min_val = 2000; // 300*5
+  slow_current_max_val = 1000; // 200*5
   fast_bemf_min_val = 2500; // 300*5
   fast_current_max_val = 1300; // 200*5
   bemf_init_val = 500;
@@ -300,6 +300,7 @@ void setup() {
 #endif
   
   if (EEPROM.read(EEPROM_initialized_loc) != EEPROM_initialized_val)
+
     {
       EEPROM.write(EEPROM_initialized_loc, EEPROM_initialized_val);
       
@@ -323,6 +324,8 @@ void setup() {
 
     }
   // now load from ee now that is configured
+if(0)
+{
   slow_bemf_min_val = (EEPROM.read(EEPROM_loc_hi_slow_bemf_min) << 8) + 
     EEPROM.read(EEPROM_loc_lo_slow_bemf_min);
   
@@ -340,10 +343,13 @@ void setup() {
   
   current_init_val = (EEPROM.read(EEPROM_loc_hi_current_init) << 8) + 
     EEPROM.read(EEPROM_loc_lo_current_init);
-
+}
 }
 
 /************************** MAIN ***************/
+
+void (* resetFunction) (void) = 0; // declare reset func at adress 0
+
 
 
 void loop() {
@@ -435,10 +441,14 @@ void loop() {
 	    {
 	      CheckForWirelessHEX(radio, flash, true);
 
-	      if  (radio.DATALEN == 2)
-		{
+	        if  (radio.DATALEN == 2)
+		{   
 		  radio_start     = radio.DATA[0] & 1;
 		  radio_autoclose = radio.DATA[1] & 1;
+      if ((radio.DATA[0] & 0xff) == 2) 
+      {
+        resetFunction();
+      }
 		}
 	      if  ((radio.DATALEN == 5) && (radio.DATA[0] == 'W')) // Waadd all in hex 
 		{
