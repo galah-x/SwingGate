@@ -165,6 +165,10 @@ void loop() {
 	      {
 	       radio.sendWithRetry(GATEID, buff, strlen(buff));
 	      }
+	    if (buff[0] == 'X'))
+	      {
+	       radio.sendWithRetry(GATEID, buff+1, strlen(buff)-1);
+	      }
 	    
 	    fetching_line = 0;
 	  }
@@ -219,7 +223,7 @@ void loop() {
 	    Serial.println('F');
 	  }
 
-	if ((input == 'R') || (input == 'W')) // Read/Write eerom
+	if ((input == 'R') || (input == 'W') || (input == 'X')) // Read/Write eerom
 	  {
 	    buff[0] = input; // remember command
 	    fetching_line = 1;
