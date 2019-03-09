@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-09 16:03:35 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-09 20:57:25 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -26,6 +26,7 @@
 
 // dont define this for current proto build front gate
 #define BACKGATE
+#define DEBUG
 
 
 #ifndef BACKGATE
@@ -415,7 +416,18 @@ void loop() {
       
       runtime--;
       if (runtime == 0) {
+#ifdef DEBUG
+	sprintf(buff, "timed exit of state %d min_bemf=%d max_i=%d", state, smallest_bemf_seen, biggest_on_current_seen);
+	radio.sendWithRetry(senderid, buff, strlen(buff));
+#endif
 	update_timed_state();
+#ifdef DEBUG
+	sprintf(buff, "new state is %d", state);
+	radio.sendWithRetry(senderid, buff, strlen(buff));
+	smallest_bemf_seen = 10000;
+	biggest_on_current_seen = 0;
+#endif
+	
       }
       if  ((digitalRead(START_STOP_N) == 0) && (hide_debounce_button == 0))
 	{
