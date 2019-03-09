@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-09 13:15:29 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-09 16:03:35 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -121,7 +121,7 @@ const byte ANA_FILTER_TERMS = 4;
 
 // assign EEPROM addresses
 const byte EEPROM_initialized_loc = 0;
-const byte EEPROM_initialized_val = 0xaa;
+const byte EEPROM_initialized_val = 0x55;
 const byte EEPROM_loc_hi_slow_bemf_min = 1;
 const byte EEPROM_loc_lo_slow_bemf_min = 2;
 const byte EEPROM_loc_hi_slow_current_max = 3;
@@ -303,23 +303,23 @@ void setup() {
     {
       EEPROM.write(EEPROM_initialized_loc, EEPROM_initialized_val);
       
-      EEPROM.write(EEPROM_loc_hi_slow_bemf_min, (slow_bemf_min_val << 8)) ;
-      EEPROM.write(EEPROM_loc_lo_slow_bemf_min, (slow_bemf_min_val << 8) & 0xff) ;
+      EEPROM.write(EEPROM_loc_hi_slow_bemf_min, (slow_bemf_min_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_slow_bemf_min, (slow_bemf_min_val & 0xff)) ;
 
-      EEPROM.write(EEPROM_loc_hi_slow_current_max, (slow_current_max_val << 8)) ;
-      EEPROM.write(EEPROM_loc_lo_slow_current_max, (slow_currend_max_val << 8) & 0xff) ;
+      EEPROM.write(EEPROM_loc_hi_slow_current_max, (slow_current_max_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_slow_current_max, (slow_current_max_val & 0xff)) ;
 
-      EEPROM.write(EEPROM_loc_hi_fast_bemf_min, (fast_bemf_min_val << 8)) ;
-      EEPROM.write(EEPROM_loc_lo_fast_bemf_min, (fast_bemf_min_val << 8) & 0xff) ;
+      EEPROM.write(EEPROM_loc_hi_fast_bemf_min, (fast_bemf_min_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_fast_bemf_min, (fast_bemf_min_val & 0xff)) ;
 
-      EEPROM.write(EEPROM_loc_hi_fast_current_max, (fast_current_max_val << 8)) ;
-      EEPROM.write(EEPROM_loc_lo_fast_current_max, (fast_current_max_val << 8) & 0xff) ;
+      EEPROM.write(EEPROM_loc_hi_fast_current_max, (fast_current_max_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_fast_current_max, (fast_current_max_val & 0xff)) ;
 
-      EEPROM.write(EEPROM_loc_hi_bemf_init, (bemf_init_val << 8)) ;
-      EEPROM.write(EEPROM_loc_lo_bemf_init, (bemf_init_val << 8) & 0xff) ;
+      EEPROM.write(EEPROM_loc_hi_bemf_init, (bemf_init_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_bemf_init, (bemf_init_val & 0xff)) ;
 
-      EEPROM.write(EEPROM_loc_hi_current_init, (current_init_val << 8)) ;
-      EEPROM.write(EEPROM_loc_lo_current_init, (current_init_val << 8) & 0xff) ;
+      EEPROM.write(EEPROM_loc_hi_current_init, (current_init_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_current_init, (current_init_val & 0xff)) ;
 
     }
   // now load from ee now that is configured
@@ -646,7 +646,7 @@ void update_motor_state(void)
     case STATE_ACCEL :
     case STATE_RUN :
 
-      sprintf(buff,"%02x accel %d (%d) %d (%d) %d %d", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val, state, run_runtime);
+      sprintf(buff,"%02x runfast %d (%d) %d (%d) %d %d", NODEID, back_emf, fast_bemf_min_val, on_current, fast_current_max_val, state, run_runtime);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
       state = STATE_STOPPED;
