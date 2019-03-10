@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-10 14:24:12 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-10 15:12:36 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -285,9 +285,9 @@ void setup() {
 
   // this bit sets up values in EEROM only in the case eerom in unconfigured
 #ifdef BACKGATE
-  slow_bemf_min_val = 2000; // 300*5
+  slow_bemf_min_val = 2200;    // 300*5
   slow_current_max_val = 1000; // 200*5
-  fast_bemf_min_val = 2500; // 300*5
+  fast_bemf_min_val = 2500;    // 300*5
   fast_current_max_val = 1300; // 200*5
   bemf_init_val = 500;
   current_init_val = 0;
@@ -673,13 +673,13 @@ void update_motor_state(void)
     case STATE_ACCEL :
     case STATE_RUN_FAST :
 
-      sprintf(buff,"%02x runfast %d (%d) %d (%d) %d %d", NODEID, back_emf, fast_bemf_min_val, on_current, fast_current_max_val, state, run_runtime);
+      sprintf(buff,"%02x stalled runfast %d (%d) %d (%d) %d %d %d", NODEID, back_emf, fast_bemf_min_val, on_current, fast_current_max_val, state, run_runtime, last_drn);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
       state = STATE_STOPPED;
       runtime=0;
       stop_motor();
-      runtime = 0;
+      run_runtime = 0;
       closed = NOT_CLOSED;
       buttoned = MANUAL;
       ticks=0;
@@ -689,11 +689,12 @@ void update_motor_state(void)
       
     case STATE_RUN_SLOW :
     case STATE_MISSED_LIMIT :
-      sprintf(buff,"%02x run slow %d (%d) %d (%d) %d %d", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val, state, run_runtime);
+      sprintf(buff,"%02x stalled runslow %d (%d) %d (%d) %d %d", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val, state, last_drn);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
       update_runtimes(ticks);
       buttoned = AUTO;
+      state = STATE_STOPPED;
       runtime=0;
       stop_motor();
       
@@ -701,7 +702,7 @@ void update_motor_state(void)
       batt_adc =  analogRead(BATT_ADC);
       batt_v = BATT_GAIN * batt_adc; 
       dtostrf(batt_v, 5, 2, buff2);
-      sprintf(buff, "%02x Batt=%sV rt=%d rac=%d ac=%d", NODEID, buff2, run_runtime, radio_autoclose, digitalRead(AUTO_CLOSE)   );  
+      sprintf(buff, "%02x Batt=%sV rrt=%d rac=%d ac=%d", NODEID, buff2, run_runtime, radio_autoclose, digitalRead(AUTO_CLOSE)   );  
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
 
       ticks=0;
@@ -727,7 +728,7 @@ void update_runtimes (int ticks)
   if (ticks < min_ticks_in_final_traverse)
     {
       // bit fast, spend less time in fast traverse
-      sprintf(buff,"%02x fast runtime %d ticks %d", NODEID, run_runtime, ticks);
+      sprintf(buff,"%02x fast runtime too long %d ticks %d", NODEID, run_runtime, ticks);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
       run_runtime -= ((ticks - min_ticks_in_final_traverse) >>  tick_shift);
@@ -737,7 +738,7 @@ void update_runtimes (int ticks)
       if (ticks > max_ticks_in_final_traverse)
 	{
 	  // bit slow, spend more time in fast traverse
-	  sprintf(buff,"%02x slow runtime %d ticks %d", NODEID, run_runtime, ticks);
+	  sprintf(buff,"%02x fast runtime too short %d ticks %d", NODEID, run_runtime, ticks);
 	  radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
 	  run_runtime += ((ticks - max_ticks_in_final_traverse) >>  tick_shift);
 	}
