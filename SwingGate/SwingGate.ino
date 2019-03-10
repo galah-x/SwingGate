@@ -285,7 +285,7 @@ void setup() {
 
   // this bit sets up values in EEROM only in the case eerom in unconfigured
 #ifdef BACKGATE
-  slow_bemf_min_val = 2200;    // 300*5
+  slow_bemf_min_val = 2000;    // 300*5
   slow_current_max_val = 1000; // 200*5
   fast_bemf_min_val = 2500;    // 300*5
   fast_current_max_val = 1300; // 200*5
@@ -612,7 +612,7 @@ void update_button_state(void)
 	  digitalWrite(LOCK, LOCK_UNLOCK);
 	  buttoned = AUTO;
 	  state = STATE_REV;
-	  runtime = 100;
+	  runtime = 50;
 	}
       else
 	{
