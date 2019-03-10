@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-09 20:57:25 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-10 14:24:12 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -175,18 +175,18 @@ const byte STATE_REV          = 1;  // get started, slowly, in reverse to let th
                                     // Ignore stall currents
 const byte STATE_START        = 2;  // get started, slowly. Ignore stall currents
 const byte STATE_ACCEL        = 3;  // accelerate. higher current limit
-const byte STATE_RUN          = 4;  // middle fast traverse. higher current limit
+const byte STATE_RUN_FAST     = 4;  // middle fast traverse. higher current limit
 const byte STATE_RUN_SLOW     = 5;  // go slowly.  Check current+bemf limys,
                                     // its intended the limit gets hit in this state
 const byte STATE_MISSED_LIMIT = 6;  // problem, no limit found. timeout to here. 
 
 // in general, from closed, the normal flow was
-// STOPPED --pb--> START --time-> ACCEL --time-> RUN --time-> RUN_SLOW --stalled-> STOPPED 
+// STOPPED --pb--> START --time-> ACCEL --time-> RUN_FAST --time-> RUN_SLOW --stalled-> STOPPED 
 // but to make the lock work, I have to take pressure off it by running backwards briefly.
-// STOPPED --pb--> REV --time-> START --time-> ACCEL --time-> RUN --time-> RUN_SLOW --stalled-> STOPPED 
+// STOPPED --pb--> REV --time-> START --time-> ACCEL --time-> RUN_FAST --time-> RUN_SLOW --stalled-> STOPPED 
 
 // in general, from open, the normal flow is
-// STOPPED --pb/timeout--> START --time-> ACCEL --time-> RUN --time-> RUN_SLOW --stalled-> STOPPED 
+// STOPPED --pb/timeout--> START --time-> ACCEL --time-> RUN_FAST --time-> RUN_SLOW --stalled-> STOPPED 
 
 // in general, from confused, the normal flow is
 // STOPPED --pb-->  START --time-> RUN_SLOW --stalled-> STOPPED 
@@ -209,8 +209,8 @@ unsigned int ontime;
 unsigned int offtime;
 unsigned int  on_current;
 unsigned int  back_emf;
-unsigned int  biggest_on_current_seen;
-unsigned int  smallest_back_emf_seen;
+unsigned int  biggest_Irun_seen;
+unsigned int  smallest_bemf_seen;
 
 byte on_current_pin;
 byte back_emf_pin;
@@ -278,8 +278,8 @@ void setup() {
   closed = IS_CLOSED;
   run_runtime = 0;
   buttoned = AUTO;
-  biggest_on_current_seen = 0;
-  smallest_back_emf_seen  = 10000;
+  biggest_Irun_seen = 0;
+  smallest_bemf_seen  = 10000;
   radio_autoclose = 0;
   radio_start = 0;
 
@@ -325,26 +325,26 @@ void setup() {
 
     }
   // now load from ee now that is configured
-if(0)
-{
-  slow_bemf_min_val = (EEPROM.read(EEPROM_loc_hi_slow_bemf_min) << 8) + 
-    EEPROM.read(EEPROM_loc_lo_slow_bemf_min);
-  
-  slow_current_max_val = (EEPROM.read(EEPROM_loc_hi_slow_current_max) << 8) + 
-    EEPROM.read(EEPROM_loc_lo_slow_current_max);
-  
-  fast_bemf_min_val = (EEPROM.read(EEPROM_loc_hi_fast_bemf_min) << 8) + 
-    EEPROM.read(EEPROM_loc_lo_fast_bemf_min);
-  
-  fast_current_max_val = (EEPROM.read(EEPROM_loc_hi_fast_current_max) << 8) + 
-    EEPROM.read(EEPROM_loc_lo_fast_current_max);
-  
-  bemf_init_val = (EEPROM.read(EEPROM_loc_hi_bemf_init) << 8) + 
-    EEPROM.read(EEPROM_loc_lo_bemf_init);
-  
-  current_init_val = (EEPROM.read(EEPROM_loc_hi_current_init) << 8) + 
-    EEPROM.read(EEPROM_loc_lo_current_init);
-}
+  if(0)
+    {
+      slow_bemf_min_val = (EEPROM.read(EEPROM_loc_hi_slow_bemf_min) << 8) + 
+	EEPROM.read(EEPROM_loc_lo_slow_bemf_min);
+      
+      slow_current_max_val = (EEPROM.read(EEPROM_loc_hi_slow_current_max) << 8) + 
+	EEPROM.read(EEPROM_loc_lo_slow_current_max);
+      
+      fast_bemf_min_val = (EEPROM.read(EEPROM_loc_hi_fast_bemf_min) << 8) + 
+	EEPROM.read(EEPROM_loc_lo_fast_bemf_min);
+      
+      fast_current_max_val = (EEPROM.read(EEPROM_loc_hi_fast_current_max) << 8) + 
+	EEPROM.read(EEPROM_loc_lo_fast_current_max);
+      
+      bemf_init_val = (EEPROM.read(EEPROM_loc_hi_bemf_init) << 8) + 
+	EEPROM.read(EEPROM_loc_lo_bemf_init);
+      
+      current_init_val = (EEPROM.read(EEPROM_loc_hi_current_init) << 8) + 
+	EEPROM.read(EEPROM_loc_lo_current_init);
+    }
 }
 
 /************************** MAIN ***************/
@@ -386,24 +386,28 @@ void loop() {
       back_emf = bemf[filt_pointer];
       // replace oldest with new term
       bemf[filt_pointer] = analogRead(back_emf_pin);      
-      // sum all the stored terms. don't bother to average, scale the limit.
+      // and sum all the stored terms. don't bother to average, scale the limit instead.
       for (i=0; i < ANA_FILTER_TERMS; i++) {
 	back_emf += bemf[i];
       }
+      // with ANA_FILTER_TERMS=4, back_emf and on_current are now the sum of the last 5 readings.
+      // dividing by 5 would yield running_average filter... So I guess this is scaled running average
+      
       //  Skip the basic initial acceleration from stopped phase, which is just a second long
       // calculate limit values
       if ( state != STATE_START)
 	{
-	  if (on_current > biggest_on_current_seen)
+	  if (on_current > biggest_Irun_seen)
 	    {
-	      biggest_on_current_seen = on_current;
+	      biggest_Irun_seen = on_current;
 	    }
 	  
-	  if (back_emf < smallest_back_emf_seen)
+	  if (back_emf < smallest_bemf_seen)
 	    {
-	      smallest_back_emf_seen = back_emf;
+	      smallest_bemf_seen = back_emf;
 	    }
 	}
+      // update the pointer to the running average filter ring buffer
       if (filt_pointer == (ANA_FILTER_TERMS -1) )
 	{
 	  filt_pointer = 0;
@@ -417,15 +421,15 @@ void loop() {
       runtime--;
       if (runtime == 0) {
 #ifdef DEBUG
-	sprintf(buff, "timed exit of state %d min_bemf=%d max_i=%d", state, smallest_bemf_seen, biggest_on_current_seen);
-	radio.sendWithRetry(senderid, buff, strlen(buff));
+	sprintf(buff, "%02x timed exit of state %d min_bemf=%d max_i=%d", NODEID, state, smallest_bemf_seen, biggest_Irun_seen);
+	radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
 #endif
 	update_timed_state();
 #ifdef DEBUG
-	sprintf(buff, "new state is %d", state);
-	radio.sendWithRetry(senderid, buff, strlen(buff));
+	sprintf(buff, "%02x new state is %d", NODEID, state);
+	radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
 	smallest_bemf_seen = 10000;
-	biggest_on_current_seen = 0;
+	biggest_Irun_seen = 0;
 #endif
 	
       }
@@ -435,9 +439,9 @@ void loop() {
 	  hide_debounce_button = debounce_button_period;
 	}
       if  (
-	   (( state == STATE_RUN_SLOW)  
+	   ((( state == STATE_RUN_SLOW) || ( state == STATE_MISSED_LIMIT))
 	    && ((back_emf < slow_bemf_min_val) || (on_current > slow_current_max_val))) ||
-	   (( state == STATE_RUN)
+	   (( state == STATE_RUN_FAST)
 	    && ((back_emf < fast_bemf_min_val) || (on_current > fast_current_max_val)))
 	   )
 	{
@@ -544,29 +548,30 @@ void update_timed_state(void)
       else
 	{
 	  state = STATE_RUN_SLOW;
-	  runtime = 3000;
+	  runtime = 6000;
 	} 
       
       break;
       
     case STATE_ACCEL :
-      state = STATE_RUN;
+      state = STATE_RUN_FAST;
       ontime = FAST_ONTIME;
       offtime = FAST_OFFTIME;
       runtime = run_runtime;
       break;
 
-    case STATE_RUN :
+    case STATE_RUN_FAST :
       state = STATE_RUN_SLOW;
       ontime = SLOW_ONTIME;
       offtime = SLOW_OFFTIME;
-      runtime = 30000;
+      runtime = 6000;
       ticks = 0;
       break;
 
     case STATE_RUN_SLOW :
+      // just going to be in missed_limit briefly so I know what happened.
       state = STATE_MISSED_LIMIT;
-      runtime = 6000;
+      runtime = 200;
       ontime = SLOW_ONTIME;
       offtime = SLOW_OFFTIME;
       break;
@@ -578,8 +583,8 @@ void update_timed_state(void)
       runtime = 0;
       run_runtime = 0;
       sprintf(buff,"%02x missed limit minBEMF %d (%d) maxI %d (%d)", NODEID,
-	      smallest_back_emf_seen, slow_bemf_min_val,
-	      biggest_on_current_seen, slow_current_max_val);
+	      smallest_bemf_seen, slow_bemf_min_val,
+	      biggest_Irun_seen, slow_current_max_val);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
       break;
@@ -639,7 +644,7 @@ void update_button_state(void)
 
     case STATE_START :
     case STATE_ACCEL :
-    case STATE_RUN :
+    case STATE_RUN_FAST :
     case STATE_RUN_SLOW :
     case STATE_MISSED_LIMIT :
       
@@ -666,7 +671,7 @@ void update_motor_state(void)
       
     case STATE_START :
     case STATE_ACCEL :
-    case STATE_RUN :
+    case STATE_RUN_FAST :
 
       sprintf(buff,"%02x runfast %d (%d) %d (%d) %d %d", NODEID, back_emf, fast_bemf_min_val, on_current, fast_current_max_val, state, run_runtime);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
@@ -745,8 +750,8 @@ void now_opening (void)
   drn_enable = EN1 ;
   on_current_pin = IS1 ;
   back_emf_pin = BACKEMF1;
-  biggest_on_current_seen = 0;
-  smallest_back_emf_seen  = 10000;
+  biggest_Irun_seen = 0;
+  smallest_bemf_seen  = 10000;
   last_drn = DRN_OPENING;
   ontime = SLOW_ONTIME;
   offtime = SLOW_OFFTIME;
@@ -763,8 +768,8 @@ void now_closing (void)
   drn_enable = EN2 ;
   on_current_pin = IS2 ;
   back_emf_pin = BACKEMF2;
-  biggest_on_current_seen = 0;
-  smallest_back_emf_seen  = 10000;
+  biggest_Irun_seen = 0;
+  smallest_bemf_seen  = 10000;
   last_drn = DRN_CLOSING;
   ontime = SLOW_ONTIME;
   offtime = SLOW_OFFTIME;
