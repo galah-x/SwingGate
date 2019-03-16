@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-10 15:12:36 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-16 14:22:15 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -25,8 +25,8 @@
 //*********************************************************************************************
 
 // dont define this for current proto build front gate
-#define BACKGATE
-#define DEBUG
+// #define BACKGATE
+// #define DEBUG
 
 
 #ifndef BACKGATE
@@ -65,7 +65,7 @@ const byte EN2      = 5;  // pwn/enable for  IBT_2 H bridge for swing motor seco
 const byte IS1      = A5; // current sense for IBT_2 H bridge for swing motor first side
 const byte IS2      = A4; // current sense for IBT_2 H bridge for swing motor second side
 
-#ifndef BACKGATE
+#ifndef PROTOTYPE
  const byte BACKEMF2 = A7; // sense motor backemf when freewheeling, 
  const byte BACKEMF1 = A6; // sense motor backemf when freewheeling, 
 #else
@@ -285,7 +285,7 @@ void setup() {
 
   // this bit sets up values in EEROM only in the case eerom in unconfigured
 #ifdef BACKGATE
-  slow_bemf_min_val = 2000;    // 300*5
+  slow_bemf_min_val = 2200;    // 300*5
   slow_current_max_val = 1000; // 200*5
   fast_bemf_min_val = 2500;    // 300*5
   fast_current_max_val = 1300; // 200*5
@@ -612,7 +612,7 @@ void update_button_state(void)
 	  digitalWrite(LOCK, LOCK_UNLOCK);
 	  buttoned = AUTO;
 	  state = STATE_REV;
-	  runtime = 50;
+	  runtime = 100;
 	}
       else
 	{
