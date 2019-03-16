@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-16 14:22:15 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-16 15:23:36 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -65,7 +65,8 @@ const byte EN2      = 5;  // pwn/enable for  IBT_2 H bridge for swing motor seco
 const byte IS1      = A5; // current sense for IBT_2 H bridge for swing motor first side
 const byte IS2      = A4; // current sense for IBT_2 H bridge for swing motor second side
 
-#ifndef PROTOTYPE
+#ifdef PROTOTYPE
+// for the lashed together prototype
  const byte BACKEMF2 = A7; // sense motor backemf when freewheeling, 
  const byte BACKEMF1 = A6; // sense motor backemf when freewheeling, 
 #else
