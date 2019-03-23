@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-23 16:34:43 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-23 16:35:21 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -25,7 +25,7 @@
 //*********************************************************************************************
 
 // dont define this for current proto build front gate
-// #define BACKGATE
+#define BACKGATE
 // #define DEBUG
 
 
