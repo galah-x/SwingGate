@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-16 15:23:36 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-23 16:34:43 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -289,14 +289,14 @@ void setup() {
   slow_bemf_min_val = 2200;    // 300*5
   slow_current_max_val = 1000; // 200*5
   fast_bemf_min_val = 2500;    // 300*5
-  fast_current_max_val = 1300; // 200*5
+  fast_current_max_val = 1800; // 200*5
   bemf_init_val = 500;
   current_init_val = 0;
 #else 
   slow_bemf_min_val = 1800; // 300*5
   slow_current_max_val = 900; // 200*5
   fast_bemf_min_val = 2500; // 300*5
-  fast_current_max_val = 1300; // 200*5
+  fast_current_max_val = 1450; // 200*5
   bemf_init_val = 500;
   current_init_val = 0;
 #endif
