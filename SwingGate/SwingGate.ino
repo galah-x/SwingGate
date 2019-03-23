@@ -24,8 +24,13 @@
 //************ IMPORTANT SETTINGS - YOU MUST CHANGE/CONFIGURE TO FIT YOUR HARDWARE *************
 //*********************************************************************************************
 
-// dont define this for current proto build front gate
-#define BACKGATE
+// define this for current proto build front gate
+// #define PROTOTYPE
+
+// define this for the back gate, not the front gate
+// #define BACKGATE
+
+// add printfs at state boundaries. hiccups 
 // #define DEBUG
 
 
@@ -267,7 +272,7 @@ void setup() {
 
   //  radio.sendWithRetry(GATEWAYID, "START", 5);
 
-  sprintf(buff, "%02x SwingGate 201903071705", NODEID);
+  sprintf(buff, "%02x SwingGate 20190323", NODEID);
   radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
   
   // radio.sleep();
@@ -286,7 +291,7 @@ void setup() {
 
   // this bit sets up values in EEROM only in the case eerom in unconfigured
 #ifdef BACKGATE
-  slow_bemf_min_val = 2200;    // 300*5
+  slow_bemf_min_val = 1950;    // 300*5
   slow_current_max_val = 1000; // 200*5
   fast_bemf_min_val = 2500;    // 300*5
   fast_current_max_val = 1800; // 200*5
