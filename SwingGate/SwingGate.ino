@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-23 16:35:21 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-27 18:25:16 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -118,7 +118,7 @@ const byte BATT_ADC     = A3;  // analog IO for measuring battery
 // V = count /1024 * (3.3 / 0.1984)  or V = count * 0.01624
 #define BATT_GAIN 0.01624
 
-char buff[50]; //this is just an empty string used as a buffer to place the payload for the radio
+char buff[60]; //this is just an empty string used as a buffer to place the payload for the radio
 char buff2[10]; //this is just an empty string used for float conversions
 
 RFM69 radio;
@@ -156,9 +156,9 @@ unsigned int im[ANA_FILTER_TERMS];
 byte filt_pointer = 0;
 
 // which way is the motor currently moving / moved last time
-byte last_drn;
-const byte DRN_CLOSING = 0;
-const byte DRN_OPENING = 1;
+char last_drn;
+const byte DRN_CLOSING = 'C';
+const byte DRN_OPENING = 'O';
 
 // is the gate closed?
 byte closed;
@@ -272,12 +272,12 @@ void setup() {
 
   //  radio.sendWithRetry(GATEWAYID, "START", 5);
 
-  sprintf(buff, "%02x SwingGate 20190323", NODEID);
+  sprintf(buff, "%02x SwingGate 20190327", NODEID);
   radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
   
   // radio.sleep();
   state = STATE_STOPPED;
-  last_drn = DRN_CLOSING;
+  last_drn = 'C';
   ticks=0;
   hide_debounce_button=0;
   filt_pointer = 0;
@@ -624,7 +624,7 @@ void update_button_state(void)
 	{
 	  if (buttoned == MANUAL)
 	    {
-	      if (last_drn == DRN_OPENING)
+	      if (last_drn == 'O')
 		{
 		  now_closing();
 		}
@@ -678,8 +678,7 @@ void update_motor_state(void)
     case STATE_START :
     case STATE_ACCEL :
     case STATE_RUN_FAST :
-
-      sprintf(buff,"%02x stalled runfast %d (%d) %d (%d) %d %d %d", NODEID, back_emf, fast_bemf_min_val, on_current, fast_current_max_val, state, run_runtime, last_drn);
+      sprintf(buff,"%02x stalled runfast V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, fast_bemf_min_val, on_current, fast_current_max_val, state, run_runtime, last_drn);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
       state = STATE_STOPPED;
@@ -687,7 +686,7 @@ void update_motor_state(void)
       stop_motor();
       run_runtime = 0;
       closed = NOT_CLOSED;
-      buttoned = MANUAL;
+      buttoned = AUTO;
       ticks=0;
       break;
 
@@ -695,7 +694,7 @@ void update_motor_state(void)
       
     case STATE_RUN_SLOW :
     case STATE_MISSED_LIMIT :
-      sprintf(buff,"%02x stalled runslow %d (%d) %d (%d) %d %d", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val, state, last_drn);
+      sprintf(buff,"%02x stalled runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val, state, run_runtime, last_drn);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
       update_runtimes(ticks);
@@ -712,7 +711,7 @@ void update_motor_state(void)
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
 
       ticks=0;
-      if (last_drn == DRN_CLOSING)
+      if (last_drn == 'C')
 	{
 	  closed = IS_CLOSED;
 	}
@@ -737,7 +736,7 @@ void update_runtimes (int ticks)
       sprintf(buff,"%02x fast runtime too long %d ticks %d", NODEID, run_runtime, ticks);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
-      run_runtime -= ((ticks - min_ticks_in_final_traverse) >>  tick_shift);
+      run_runtime -= ((min_ticks_in_final_traverse - ticks) >>  tick_shift);
     }
   else
     {
@@ -759,7 +758,7 @@ void now_opening (void)
   back_emf_pin = BACKEMF1;
   biggest_Irun_seen = 0;
   smallest_bemf_seen  = 10000;
-  last_drn = DRN_OPENING;
+  last_drn = 'O';
   ontime = SLOW_ONTIME;
   offtime = SLOW_OFFTIME;
   digitalWrite(DRN2, 0);
@@ -777,7 +776,7 @@ void now_closing (void)
   back_emf_pin = BACKEMF2;
   biggest_Irun_seen = 0;
   smallest_bemf_seen  = 10000;
-  last_drn = DRN_CLOSING;
+  last_drn = 'C';
   ontime = SLOW_ONTIME;
   offtime = SLOW_OFFTIME;
   digitalWrite(DRN1, 0);
