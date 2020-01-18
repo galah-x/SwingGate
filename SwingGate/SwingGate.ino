@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2020-01-18 16:06:23 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2020-01-18 17:38:03 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -134,6 +134,7 @@ const uint8_t ANA_FILTER_TERMS = 4;
 // open/close depending on which way its going.
 
 // assign EEPROM addresses
+#ifdef USE_EEPROM
 const uint8_t EEPROM_initialized_loc = 0;
 const uint8_t EEPROM_initialized_val = 0x5c;
 const uint8_t EEPROM_loc_hi_slow_open_bemf_min = 1;
@@ -156,6 +157,34 @@ const uint8_t EEPROM_loc_hi_fast_close_bemf_min = 17;
 const uint8_t EEPROM_loc_lo_fast_close_bemf_min = 18;
 const uint8_t EEPROM_loc_hi_fast_close_current_max = 19;
 const uint8_t EEPROM_loc_lo_fast_close_current_max = 20;
+#endif
+
+#ifdef BACKGATE
+  #define slow_open_bemf_min_val     1950
+  #define slow_open_current_max_val  1000
+  #define fast_open_bemf_min_val     2500
+  #define fast_open_current_max_val  1800
+  #define slow_close_bemf_min_val     1950
+  #define slow_close_current_max_val  1000
+  #define fast_close_bemf_min_val     2500
+  #define fast_close_current_max_val  1800
+#else 
+  #define slow_open_bemf_min_val     1800
+  #define slow_open_current_max_val  900
+  #define fast_open_bemf_min_val     2500
+  #define fast_open_current_max_val  1450
+  #define slow_close_bemf_min_val     2200
+  #define slow_close_current_max_val  1200
+  #define fast_close_bemf_min_val     2500
+  #define fast_close_current_max_val  1450
+#endif
+  #define bemf_init_val  500
+  #define current_init_val  0 
+
+
+
+
+#ifdef USE_EEPROM
 
 #define fast_close_I_max (EEPROM.read(EEPROM_loc_hi_fast_close_current_max) << 8 + EEPROM.read(EEPROM_loc_lo_fast_close_current_max))
 #define slow_close_I_max (EEPROM.read(EEPROM_loc_hi_slow_close_current_max) << 8 + EEPROM.read(EEPROM_loc_lo_slow_close_current_max))
@@ -167,6 +196,17 @@ const uint8_t EEPROM_loc_lo_fast_close_current_max = 20;
 #define fast_open_BEMF_min  (EEPROM.read(EEPROM_loc_hi_fast_open_bemf_min) << 8 + EEPROM.read(EEPROM_loc_lo_fast_open_bemf_min))
 #define slow_open_BEMF_min  (EEPROM.read(EEPROM_loc_hi_slow_open_bemf_min) << 8 + EEPROM.read(EEPROM_loc_lo_slow_open_bemf_min))
 
+#else
+#define fast_close_I_max    fast_close_current_max_val  
+#define slow_close_I_max    slow_close_current_max_val
+#define fast_open_I_max     fast_open_current_max_val 
+#define slow_open_I_max     slow_open_current_max_val 
+			  
+#define fast_close_BEMF_min fast_close_bemf_min_val    
+#define slow_close_BEMF_min slow_close_bemf_min_val   
+#define fast_open_BEMF_min  fast_open_bemf_min_val    
+#define slow_open_BEMF_min  slow_open_bemf_min_val      
+#endif
 
 
 uint16_t bemf[ANA_FILTER_TERMS];
@@ -310,28 +350,8 @@ void setup() {
   radio_start = 0;
 
   // this bit sets up values in EEROM only in the case eerom in unconfigured
-#ifdef BACKGATE
-  #define slow_open_bemf_min_val     1950
-  #define slow_open_current_max_val  1000
-  #define fast_open_bemf_min_val     2500
-  #define fast_open_current_max_val  1800
-  #define slow_close_bemf_min_val     1950
-  #define slow_close_current_max_val  1000
-  #define fast_close_bemf_min_val     2500
-  #define fast_close_current_max_val  1800
-#else 
-  #define slow_open_bemf_min_val     1800
-  #define slow_open_current_max_val  900
-  #define fast_open_bemf_min_val     2500
-  #define fast_open_current_max_val  1450
-  #define slow_close_bemf_min_val     2200
-  #define slow_close_current_max_val  1200
-  #define fast_close_bemf_min_val     2500
-  #define fast_close_current_max_val  1450
-#endif
-  #define bemf_init_val  500
-  #define current_init_val  0 
-  
+#ifdef USE_EEPROM
+    
   if (EEPROM.read(EEPROM_initialized_loc) != EEPROM_initialized_val)
 
     {
@@ -369,6 +389,7 @@ void setup() {
       EEPROM.write(EEPROM_loc_lo_current_init, (current_init_val & 0xff)) ;
 
     }
+#endif    
 }
 
 /************************** MAIN ***************/
