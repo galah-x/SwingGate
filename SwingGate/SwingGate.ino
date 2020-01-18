@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2020-01-18 17:38:03 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2020-01-18 18:02:25 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -170,13 +170,13 @@ const uint8_t EEPROM_loc_lo_fast_close_current_max = 20;
   #define fast_close_current_max_val  1800
 #else 
   #define slow_open_bemf_min_val     1800
-  #define slow_open_current_max_val  900
+  #define slow_close_bemf_min_val    1600
   #define fast_open_bemf_min_val     2500
+  #define fast_close_bemf_min_val    2300
+  #define slow_open_current_max_val  900
+  #define slow_close_current_max_val 1000
   #define fast_open_current_max_val  1450
-  #define slow_close_bemf_min_val     2200
-  #define slow_close_current_max_val  1200
-  #define fast_close_bemf_min_val     2500
-  #define fast_close_current_max_val  1450
+  #define fast_close_current_max_val 1750
 #endif
   #define bemf_init_val  500
   #define current_init_val  0 
