@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2019-03-27 18:25:16 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2020-01-18 16:06:23 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -63,31 +63,34 @@
 
 // these are the IOs used for the swing gate linear actuator
 // for the prototype
-const byte DRN1     = 4;  // direction pin for IBT_2 H bridge for swing motor first side
-const byte EN1      = 3;  // pwn/enable for  IBT_2 H bridge for swing motor first side
-const byte DRN2     = 6;  // direction pin for IBT_2 H bridge for swing motor second side
-const byte EN2      = 5;  // pwn/enable for  IBT_2 H bridge for swing motor second side
-const byte IS1      = A5; // current sense for IBT_2 H bridge for swing motor first side
-const byte IS2      = A4; // current sense for IBT_2 H bridge for swing motor second side
+const uint8_t DRN1     = 4;  // direction pin for IBT_2 H bridge for swing motor first side
+const uint8_t EN1      = 3;  // pwn/enable for  IBT_2 H bridge for swing motor first side
+const uint8_t DRN2     = 6;  // direction pin for IBT_2 H bridge for swing motor second side
+const uint8_t EN2      = 5;  // pwn/enable for  IBT_2 H bridge for swing motor second side
+const uint8_t IS1      = A5; // current sense for IBT_2 H bridge for swing motor first side
+const uint8_t IS2      = A4; // current sense for IBT_2 H bridge for swing motor second side
 
 #ifdef PROTOTYPE
 // for the lashed together prototype
- const byte BACKEMF2 = A7; // sense motor backemf when freewheeling, 
- const byte BACKEMF1 = A6; // sense motor backemf when freewheeling, 
+ const uint8_t BACKEMF2 = A7; // sense motor backemf when freewheeling, 
+ const uint8_t BACKEMF1 = A6; // sense motor backemf when freewheeling, 
 #else
 // for the r1 PCB
- const byte BACKEMF2 = A6; // sense motor backemf when freewheeling, 
- const byte BACKEMF1 = A7; // sense motor backemf when freewheeling, 
+ const uint8_t BACKEMF2 = A6; // sense motor backemf when freewheeling, 
+ const uint8_t BACKEMF1 = A7; // sense motor backemf when freewheeling, 
 #endif
 
 // these are the IOs used for the swing gate lock (unlocker)
-const byte LOCK     = 9;  // its the enable pin for the paralleled 2x2A L298 H bridge, used as a protected NFET.
+const uint8_t LOCK     = 9;  // its the enable pin for the paralleled 2x2A L298 H bridge, used as a protected NFET.
 // draws too much current (50mA) if I leave it enabled and drive the logic input active. 
 
 // these are the IOs used for the swing gate sense inputs
-const byte START_STOP_N = 7;   // active low 'start/stop input pin
-const byte AUTO_CLOSE   = A2;  // if high, autoclose after 30 seconds
-const byte BATT_ADC     = A3;  // analog IO for measuring battery
+const uint8_t START_STOP_N = 7;   // active low 'start/stop input pin
+const uint8_t AUTO_CLOSE   = A2;  // if high, autoclose after 30 seconds
+const uint8_t BATT_ADC     = A3;  // analog IO for measuring battery
+
+const uint8_t PROXIMITY_PWR = A0;  // enable open and close detectors
+const uint8_t PROXIMITY_N   = A1;  // proximity detectors.. its an open collector output, so low = detected.
 
 // The general plan for the swing linear actuator is to go slowly for a couple of seconds, then increase to max for main traverse,
 // then slow down again a bit before it reaches the limit. 
@@ -124,67 +127,80 @@ char buff2[10]; //this is just an empty string used for float conversions
 RFM69 radio;
 SPIFlash flash(FLASH_SS, 0xEF30);
 
-const byte ANA_FILTER_TERMS = 4;
+const uint8_t ANA_FILTER_TERMS = 4;
+
+// Hi/lo as these are 16 bit unsigned quantities
+// slow/fast for when the gate is traversing at full or limited PWMd speed
+// open/close depending on which way its going.
 
 // assign EEPROM addresses
-const byte EEPROM_initialized_loc = 0;
-const byte EEPROM_initialized_val = 0x55;
-const byte EEPROM_loc_hi_slow_bemf_min = 1;
-const byte EEPROM_loc_lo_slow_bemf_min = 2;
-const byte EEPROM_loc_hi_slow_current_max = 3;
-const byte EEPROM_loc_lo_slow_current_max = 4;
-const byte EEPROM_loc_hi_fast_bemf_min = 5;
-const byte EEPROM_loc_lo_fast_bemf_min = 6;
-const byte EEPROM_loc_hi_fast_current_max = 7;
-const byte EEPROM_loc_lo_fast_current_max = 8;
-const byte EEPROM_loc_hi_bemf_init = 9;
-const byte EEPROM_loc_lo_bemf_init = 10;
-const byte EEPROM_loc_hi_current_init = 11;
-const byte EEPROM_loc_lo_current_init = 12;
+const uint8_t EEPROM_initialized_loc = 0;
+const uint8_t EEPROM_initialized_val = 0x5c;
+const uint8_t EEPROM_loc_hi_slow_open_bemf_min = 1;
+const uint8_t EEPROM_loc_lo_slow_open_bemf_min = 2;
+const uint8_t EEPROM_loc_hi_slow_open_current_max = 3;
+const uint8_t EEPROM_loc_lo_slow_open_current_max = 4;
+const uint8_t EEPROM_loc_hi_fast_open_bemf_min = 5;
+const uint8_t EEPROM_loc_lo_fast_open_bemf_min = 6;
+const uint8_t EEPROM_loc_hi_fast_open_current_max = 7;
+const uint8_t EEPROM_loc_lo_fast_open_current_max = 8;
+const uint8_t EEPROM_loc_hi_bemf_init = 9;
+const uint8_t EEPROM_loc_lo_bemf_init = 10;
+const uint8_t EEPROM_loc_hi_current_init = 11;
+const uint8_t EEPROM_loc_lo_current_init = 12;
+const uint8_t EEPROM_loc_hi_slow_close_bemf_min = 13;
+const uint8_t EEPROM_loc_lo_slow_close_bemf_min = 14;
+const uint8_t EEPROM_loc_hi_slow_close_current_max = 15;
+const uint8_t EEPROM_loc_lo_slow_close_current_max = 16;
+const uint8_t EEPROM_loc_hi_fast_close_bemf_min = 17;
+const uint8_t EEPROM_loc_lo_fast_close_bemf_min = 18;
+const uint8_t EEPROM_loc_hi_fast_close_current_max = 19;
+const uint8_t EEPROM_loc_lo_fast_close_current_max = 20;
 
-unsigned int slow_bemf_min_val;
-unsigned int slow_current_max_val;
-unsigned int fast_bemf_min_val;
-unsigned int fast_current_max_val;
-unsigned int bemf_init_val;
-unsigned int current_init_val;
+#define fast_close_I_max (EEPROM.read(EEPROM_loc_hi_fast_close_current_max) << 8 + EEPROM.read(EEPROM_loc_lo_fast_close_current_max))
+#define slow_close_I_max (EEPROM.read(EEPROM_loc_hi_slow_close_current_max) << 8 + EEPROM.read(EEPROM_loc_lo_slow_close_current_max))
+#define fast_open_I_max  (EEPROM.read(EEPROM_loc_hi_fast_open_current_max) << 8 + EEPROM.read(EEPROM_loc_lo_fast_open_current_max))
+#define slow_open_I_max  (EEPROM.read(EEPROM_loc_hi_slow_open_current_max) << 8 + EEPROM.read(EEPROM_loc_lo_slow_open_current_max))
+
+#define fast_close_BEMF_min (EEPROM.read(EEPROM_loc_hi_fast_close_bemf_min) << 8 + EEPROM.read(EEPROM_loc_lo_fast_close_bemf_min))
+#define slow_close_BEMF_min (EEPROM.read(EEPROM_loc_hi_slow_close_bemf_min) << 8 + EEPROM.read(EEPROM_loc_lo_slow_close_bemf_min))
+#define fast_open_BEMF_min  (EEPROM.read(EEPROM_loc_hi_fast_open_bemf_min) << 8 + EEPROM.read(EEPROM_loc_lo_fast_open_bemf_min))
+#define slow_open_BEMF_min  (EEPROM.read(EEPROM_loc_hi_slow_open_bemf_min) << 8 + EEPROM.read(EEPROM_loc_lo_slow_open_bemf_min))
 
 
 
-unsigned int bemf[ANA_FILTER_TERMS];
-unsigned int im[ANA_FILTER_TERMS];
-byte filt_pointer = 0;
+uint16_t bemf[ANA_FILTER_TERMS];
+uint16_t im[ANA_FILTER_TERMS];
+uint8_t filt_pointer = 0;
 
 // which way is the motor currently moving / moved last time
 char last_drn;
-const byte DRN_CLOSING = 'C';
-const byte DRN_OPENING = 'O';
+const uint8_t DRN_CLOSING = 'C';
+const uint8_t DRN_OPENING = 'O';
 
 // is the gate closed?
-byte closed;
-const byte IS_CLOSED = 1;
-const byte NOT_CLOSED = 0;
+bool closed;   // true == closed
 
 // did someone hit the button except to start it initially.
-byte buttoned;
-const byte MANUAL = 1;
-const byte AUTO = 0;
+uint8_t buttoned;
+const uint8_t MANUAL = 1;
+const uint8_t AUTO = 0;
 
-byte radio_autoclose;
-byte radio_start;
+uint8_t radio_autoclose;
+uint8_t radio_start;
 
-byte state;
+uint8_t state;
 
 // controls motion
-const byte STATE_STOPPED      = 0;  // not running 
-const byte STATE_REV          = 1;  // get started, slowly, in reverse to let the lock open.
+const uint8_t STATE_STOPPED      = 0;  // not running 
+const uint8_t STATE_REV          = 1;  // get started, slowly, in reverse to let the lock open.
                                     // Ignore stall currents
-const byte STATE_START        = 2;  // get started, slowly. Ignore stall currents
-const byte STATE_ACCEL        = 3;  // accelerate. higher current limit
-const byte STATE_RUN_FAST     = 4;  // middle fast traverse. higher current limit
-const byte STATE_RUN_SLOW     = 5;  // go slowly.  Check current+bemf limys,
+const uint8_t STATE_START        = 2;  // get started, slowly. Ignore stall currents
+const uint8_t STATE_ACCEL        = 3;  // accelerate. higher current limit
+const uint8_t STATE_RUN_FAST     = 4;  // middle fast traverse. higher current limit
+const uint8_t STATE_RUN_SLOW     = 5;  // go slowly.  Check current+bemf limys,
                                     // its intended the limit gets hit in this state
-const byte STATE_MISSED_LIMIT = 6;  // problem, no limit found. timeout to here. 
+const uint8_t STATE_MISSED_LIMIT = 6;  // problem, no limit found. timeout to here. 
 
 // in general, from closed, the normal flow was
 // STOPPED --pb--> START --time-> ACCEL --time-> RUN_FAST --time-> RUN_SLOW --stalled-> STOPPED 
@@ -199,41 +215,41 @@ const byte STATE_MISSED_LIMIT = 6;  // problem, no limit found. timeout to here.
 
 
 
-const int min_ticks_in_final_traverse = 300; // 3 secs
-const int max_ticks_in_final_traverse = 500; // 5 secs
-const int tick_shift = 3;  // ie gain of 1/8, less than 4.5 from the PWM terms. 
-const int idle_ticks_auto_close = 3000; // 30 seconds.
+const uint16_t min_ticks_in_final_traverse = 300; // 3 secs
+const uint16_t max_ticks_in_final_traverse = 500; // 5 secs
+const uint16_t tick_shift = 3;  // ie gain of 1/8, less than 4.5 from the PWM terms. 
+const uint16_t idle_ticks_auto_close = 3000; // 30 seconds.
 
-int traverse_runtime;
-int start_runtime;
-int end_runtime;
+// uint16_t traverse_runtime;
+// uint16_t start_runtime;
+// uint16_t end_runtime;
 
-byte drn_enable;
-unsigned int run_runtime;
-unsigned int runtime;  
-unsigned int ontime;
-unsigned int offtime;
-unsigned int  on_current;
-unsigned int  back_emf;
-unsigned int  biggest_Irun_seen;
-unsigned int  smallest_bemf_seen;
+uint8_t drn_enable;
+uint16_t run_runtime;
+uint16_t runtime;  
+uint16_t ontime;
+uint16_t offtime;
+uint16_t  on_current;
+uint16_t  back_emf;
+uint16_t  biggest_Irun_seen;
+uint16_t  smallest_bemf_seen;
 
-byte on_current_pin;
-byte back_emf_pin;
-unsigned int ticks;
-unsigned int hide_debounce_button;
+uint8_t on_current_pin;
+uint8_t back_emf_pin;
+uint16_t ticks;
+uint16_t hide_debounce_button;
 
 
-const byte debounce_button_period = 100 ; // 1 second if pwm loop is 10ms 
+const uint8_t debounce_button_period = 100 ; // 1 second if pwm loop is 10ms 
 
-const byte SLOW_ONTIME  = 2; 
-const byte SLOW_OFFTIME = 7;   // + 1 for stabilize backemf measure 
+const uint8_t SLOW_ONTIME  = 2; 
+const uint8_t SLOW_OFFTIME = 7;   // + 1 for stabilize backemf measure 
 
-const byte MED_ONTIME   = 6; 
-const byte MED_OFFTIME  = 3;   // + 1 for stabilize backemf measure 
+const uint8_t MED_ONTIME   = 6; 
+const uint8_t MED_OFFTIME  = 3;   // + 1 for stabilize backemf measure 
 
-const byte FAST_ONTIME  = 9; 
-const byte FAST_OFFTIME = 0;   // + 1 for stabilize backemf measure 
+const uint8_t FAST_ONTIME  = 9; 
+const uint8_t FAST_OFFTIME = 0;   // + 1 for stabilize backemf measure 
 
 
 
@@ -261,6 +277,8 @@ void setup() {
   pinMode(LOCK, OUTPUT);
   pinMode(START_STOP_N, INPUT);
   pinMode(AUTO_CLOSE, INPUT_PULLUP);
+  pinMode(PROXIMITY_PWR, OUTPUT);
+  pinMode(PROXIMITY_N, INPUT);
 
   analogReference(DEFAULT);
   
@@ -269,10 +287,12 @@ void setup() {
   digitalWrite(DRN2, DRN2_OPEN);
   digitalWrite(EN2,  PWM_OFF);
   digitalWrite(LOCK, LOCK_LOCKED);
-
+  digitalWrite(PROXIMITY_PWR, 0);
+  
+  
   //  radio.sendWithRetry(GATEWAYID, "START", 5);
 
-  sprintf(buff, "%02x SwingGate 20190327", NODEID);
+  sprintf(buff, "%02x SwingGate 20200118", NODEID);
   radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
   
   // radio.sleep();
@@ -281,7 +301,7 @@ void setup() {
   ticks=0;
   hide_debounce_button=0;
   filt_pointer = 0;
-  closed = IS_CLOSED;
+  closed = false;
   run_runtime = 0;
   buttoned = AUTO;
   biggest_Irun_seen = 0;
@@ -291,65 +311,63 @@ void setup() {
 
   // this bit sets up values in EEROM only in the case eerom in unconfigured
 #ifdef BACKGATE
-  slow_bemf_min_val = 1950;    // 300*5
-  slow_current_max_val = 1000; // 200*5
-  fast_bemf_min_val = 2500;    // 300*5
-  fast_current_max_val = 1800; // 200*5
-  bemf_init_val = 500;
-  current_init_val = 0;
+  #define slow_open_bemf_min_val     1950
+  #define slow_open_current_max_val  1000
+  #define fast_open_bemf_min_val     2500
+  #define fast_open_current_max_val  1800
+  #define slow_close_bemf_min_val     1950
+  #define slow_close_current_max_val  1000
+  #define fast_close_bemf_min_val     2500
+  #define fast_close_current_max_val  1800
 #else 
-  slow_bemf_min_val = 1800; // 300*5
-  slow_current_max_val = 900; // 200*5
-  fast_bemf_min_val = 2500; // 300*5
-  fast_current_max_val = 1450; // 200*5
-  bemf_init_val = 500;
-  current_init_val = 0;
+  #define slow_open_bemf_min_val     1800
+  #define slow_open_current_max_val  900
+  #define fast_open_bemf_min_val     2500
+  #define fast_open_current_max_val  1450
+  #define slow_close_bemf_min_val     2200
+  #define slow_close_current_max_val  1200
+  #define fast_close_bemf_min_val     2500
+  #define fast_close_current_max_val  1450
 #endif
+  #define bemf_init_val  500
+  #define current_init_val  0 
   
   if (EEPROM.read(EEPROM_initialized_loc) != EEPROM_initialized_val)
 
     {
       EEPROM.write(EEPROM_initialized_loc, EEPROM_initialized_val);
       
-      EEPROM.write(EEPROM_loc_hi_slow_bemf_min, (slow_bemf_min_val >> 8)) ;
-      EEPROM.write(EEPROM_loc_lo_slow_bemf_min, (slow_bemf_min_val & 0xff)) ;
+      EEPROM.write(EEPROM_loc_hi_slow_open_bemf_min, (slow_open_bemf_min_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_slow_open_bemf_min, (slow_open_bemf_min_val & 0xff)) ;
 
-      EEPROM.write(EEPROM_loc_hi_slow_current_max, (slow_current_max_val >> 8)) ;
-      EEPROM.write(EEPROM_loc_lo_slow_current_max, (slow_current_max_val & 0xff)) ;
+      EEPROM.write(EEPROM_loc_hi_slow_open_current_max, (slow_open_current_max_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_slow_open_current_max, (slow_open_current_max_val & 0xff)) ;
 
-      EEPROM.write(EEPROM_loc_hi_fast_bemf_min, (fast_bemf_min_val >> 8)) ;
-      EEPROM.write(EEPROM_loc_lo_fast_bemf_min, (fast_bemf_min_val & 0xff)) ;
+      EEPROM.write(EEPROM_loc_hi_fast_open_bemf_min, (fast_open_bemf_min_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_fast_open_bemf_min, (fast_open_bemf_min_val & 0xff)) ;
 
-      EEPROM.write(EEPROM_loc_hi_fast_current_max, (fast_current_max_val >> 8)) ;
-      EEPROM.write(EEPROM_loc_lo_fast_current_max, (fast_current_max_val & 0xff)) ;
+      EEPROM.write(EEPROM_loc_hi_fast_open_current_max, (fast_open_current_max_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_fast_open_current_max, (fast_open_current_max_val & 0xff)) ;
 
+      EEPROM.write(EEPROM_loc_hi_slow_close_bemf_min, (slow_close_bemf_min_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_slow_close_bemf_min, (slow_close_bemf_min_val & 0xff)) ;
+
+      EEPROM.write(EEPROM_loc_hi_slow_close_current_max, (slow_close_current_max_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_slow_close_current_max, (slow_close_current_max_val & 0xff)) ;
+
+      EEPROM.write(EEPROM_loc_hi_fast_close_bemf_min, (fast_close_bemf_min_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_fast_close_bemf_min, (fast_close_bemf_min_val & 0xff)) ;
+
+      EEPROM.write(EEPROM_loc_hi_fast_close_current_max, (fast_close_current_max_val >> 8)) ;
+      EEPROM.write(EEPROM_loc_lo_fast_close_current_max, (fast_close_current_max_val & 0xff)) ;
+
+      
       EEPROM.write(EEPROM_loc_hi_bemf_init, (bemf_init_val >> 8)) ;
       EEPROM.write(EEPROM_loc_lo_bemf_init, (bemf_init_val & 0xff)) ;
 
       EEPROM.write(EEPROM_loc_hi_current_init, (current_init_val >> 8)) ;
       EEPROM.write(EEPROM_loc_lo_current_init, (current_init_val & 0xff)) ;
 
-    }
-  // now load from ee now that is configured
-  if(0)
-    {
-      slow_bemf_min_val = (EEPROM.read(EEPROM_loc_hi_slow_bemf_min) << 8) + 
-	EEPROM.read(EEPROM_loc_lo_slow_bemf_min);
-      
-      slow_current_max_val = (EEPROM.read(EEPROM_loc_hi_slow_current_max) << 8) + 
-	EEPROM.read(EEPROM_loc_lo_slow_current_max);
-      
-      fast_bemf_min_val = (EEPROM.read(EEPROM_loc_hi_fast_bemf_min) << 8) + 
-	EEPROM.read(EEPROM_loc_lo_fast_bemf_min);
-      
-      fast_current_max_val = (EEPROM.read(EEPROM_loc_hi_fast_current_max) << 8) + 
-	EEPROM.read(EEPROM_loc_lo_fast_current_max);
-      
-      bemf_init_val = (EEPROM.read(EEPROM_loc_hi_bemf_init) << 8) + 
-	EEPROM.read(EEPROM_loc_lo_bemf_init);
-      
-      current_init_val = (EEPROM.read(EEPROM_loc_hi_current_init) << 8) + 
-	EEPROM.read(EEPROM_loc_lo_current_init);
     }
 }
 
@@ -360,10 +378,10 @@ void (* resetFunction) (void) = 0; // declare reset func at adress 0
 
 
 void loop() {
-  byte i;
-  byte address;
-  byte dataval;
-  byte senderid;
+  uint8_t i;
+  uint8_t address;
+  uint8_t dataval;
+  uint8_t senderid;
   
   ticks++;
   if (hide_debounce_button)
@@ -445,10 +463,16 @@ void loop() {
 	  hide_debounce_button = debounce_button_period;
 	}
       if  (
-	   ((( state == STATE_RUN_SLOW) || ( state == STATE_MISSED_LIMIT))
-	    && ((back_emf < slow_bemf_min_val) || (on_current > slow_current_max_val))) ||
-	   (( state == STATE_RUN_FAST)
-	    && ((back_emf < fast_bemf_min_val) || (on_current > fast_current_max_val)))
+	   ((( state == STATE_RUN_SLOW) || ( state == STATE_MISSED_LIMIT) || ( state == STATE_RUN_FAST)) && (digitalRead(PROXIMITY_N) == 0)) ||
+	   
+	   ((( state == STATE_RUN_SLOW) || ( state == STATE_MISSED_LIMIT)) && (last_drn == 'C')
+	    && ((back_emf < slow_close_BEMF_min) || (on_current > slow_close_I_max))) ||
+	   ((( state == STATE_RUN_SLOW) || ( state == STATE_MISSED_LIMIT)) && (last_drn == 'O')
+	    && ((back_emf < slow_open_BEMF_min) || (on_current > slow_open_I_max))) ||
+	   (( state == STATE_RUN_FAST) && (last_drn == 'C')
+	    && ((back_emf < fast_close_BEMF_min) || (on_current > fast_close_I_max))) ||
+	   (( state == STATE_RUN_FAST) && (last_drn == 'O')
+	    && ((back_emf < fast_open_BEMF_min) || (on_current > fast_open_I_max)))
 	   )
 	{
 	  update_motor_state();
@@ -506,7 +530,7 @@ void loop() {
 	  ticks=0;
 
 	  if (((digitalRead(AUTO_CLOSE)==1) ^ (radio_autoclose == 1))
-	      && (closed == NOT_CLOSED)
+	      && (!closed)
 	      && (buttoned==AUTO)
 	      )
 	    {
@@ -527,7 +551,7 @@ void loop() {
 // update the state variables 
 void update_timed_state(void)
 {
-  unsigned int batt_adc;
+  uint16_t batt_adc;
   float batt_v;
   switch (state)
     {
@@ -588,9 +612,15 @@ void update_timed_state(void)
       stop_motor();
       runtime = 0;
       run_runtime = 0;
-      sprintf(buff,"%02x missed limit minBEMF %d (%d) maxI %d (%d)", NODEID,
-	      smallest_bemf_seen, slow_bemf_min_val,
-	      biggest_Irun_seen, slow_current_max_val);
+      if (last_drn == 'C') 
+	sprintf(buff,"%02x missed lim C minBEMF %d (%d) maxI %d (%d)", NODEID,
+		smallest_bemf_seen, slow_close_BEMF_min,
+		biggest_Irun_seen, slow_close_I_max);
+      else
+	sprintf(buff,"%02x missed lim O minBEMF %d (%d) maxI %d (%d)", NODEID,
+		smallest_bemf_seen, slow_open_BEMF_min,
+		biggest_Irun_seen, slow_open_I_max);
+	
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
       break;
@@ -609,10 +639,13 @@ void update_button_state(void)
   switch (state)
     {
     case STATE_STOPPED :
-      sprintf(buff,"%02x button start %d (%d) %d (%d)", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val);
+      if (last_drn == 'C')
+	sprintf(buff,"%02x button start C %d (%d) %d (%d)", NODEID, back_emf, slow_close_BEMF_min, on_current, slow_close_I_max);
+      else 
+	sprintf(buff,"%02x button start O %d (%d) %d (%d)", NODEID, back_emf, slow_open_BEMF_min, on_current, slow_open_I_max);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
-      if (closed == IS_CLOSED)
+      if (closed)
 	{
 	  now_closing();
 	  digitalWrite(LOCK, LOCK_UNLOCK);
@@ -653,15 +686,18 @@ void update_button_state(void)
     case STATE_RUN_FAST :
     case STATE_RUN_SLOW :
     case STATE_MISSED_LIMIT :
-      
-      sprintf(buff,"%02x button stop %d (%d) %d (%d) %d", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val, state);
+
+      if (last_drn == 'C')
+	sprintf(buff,"%02x button stop C %d (%d) %d (%d) %d", NODEID, back_emf, slow_close_BEMF_min, on_current, slow_close_I_max, state);
+      else 
+	sprintf(buff,"%02x button stop O %d (%d) %d (%d) %d", NODEID, back_emf, slow_open_BEMF_min, on_current, slow_open_I_max, state);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
       state = STATE_STOPPED;
       buttoned = MANUAL; 
       stop_motor();
       runtime=0;
-      closed = NOT_CLOSED;
+      closed = false;
       break;
     }
 }
@@ -670,7 +706,7 @@ void update_button_state(void)
 void update_motor_state(void)
 {
   int i;
-  unsigned int batt_adc;
+  uint16_t batt_adc;
   float batt_v;
   switch (state)
     {
@@ -678,14 +714,17 @@ void update_motor_state(void)
     case STATE_START :
     case STATE_ACCEL :
     case STATE_RUN_FAST :
-      sprintf(buff,"%02x stalled runfast V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, fast_bemf_min_val, on_current, fast_current_max_val, state, run_runtime, last_drn);
+      if (last_drn == 'C')
+	sprintf(buff,"%02x stall fast C V=%d/%d I=%d/%d s=%d rt=%d", NODEID, back_emf, fast_close_BEMF_min, on_current, fast_close_I_max, state, run_runtime);
+      else 
+	sprintf(buff,"%02x stall fast O V=%d/%d I=%d/%d s=%d rt=%d", NODEID, back_emf, fast_open_BEMF_min, on_current, fast_open_I_max, state, run_runtime);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
       state = STATE_STOPPED;
       runtime=0;
       stop_motor();
       run_runtime = 0;
-      closed = NOT_CLOSED;
+      closed = false;
       buttoned = AUTO;
       ticks=0;
       break;
@@ -694,8 +733,12 @@ void update_motor_state(void)
       
     case STATE_RUN_SLOW :
     case STATE_MISSED_LIMIT :
-      sprintf(buff,"%02x stalled runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_bemf_min_val, on_current, slow_current_max_val, state, run_runtime, last_drn);
-      radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+      if (last_drn == 'C')
+	sprintf(buff,"%02x stalled runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_close_BEMF_min, on_current, slow_close_I_max, state, run_runtime, last_drn);
+      else 
+	sprintf(buff,"%02x stalled runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_open_BEMF_min, on_current, slow_open_I_max, state, run_runtime, last_drn);
+
+	radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
       update_runtimes(ticks);
       buttoned = AUTO;
@@ -713,11 +756,11 @@ void update_motor_state(void)
       ticks=0;
       if (last_drn == 'C')
 	{
-	  closed = IS_CLOSED;
+	  closed = true;
 	}
       else
 	{
-	  closed = NOT_CLOSED;
+	  closed = false;
 	}
     }
 }
@@ -753,6 +796,7 @@ void update_runtimes (int ticks)
 
 void now_opening (void)
 {
+  digitalWrite(PROXIMITY_PWR,1);  // enable proximity switches
   drn_enable = EN1 ;
   on_current_pin = IS1 ;
   back_emf_pin = BACKEMF1;
@@ -770,6 +814,7 @@ void now_opening (void)
 
 void now_closing (void)
 {
+  digitalWrite(PROXIMITY_PWR,1);  // enable proximity switches
   // runtime = 100;
   drn_enable = EN2 ;
   on_current_pin = IS2 ;
@@ -791,4 +836,5 @@ void stop_motor (void)
   digitalWrite(DRN2, 0);
   digitalWrite(EN1, PWM_OFF);
   digitalWrite(EN2, PWM_OFF);
+  digitalWrite(PROXIMITY_PWR,0);  // power down proximity switches
 }
