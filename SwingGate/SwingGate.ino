@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2020-01-18 18:02:25 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2020-02-15 14:48:15 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -29,16 +29,20 @@
 
 // define this for the back gate, not the front gate
 // #define BACKGATE
+#include "whichgate.h"
+
 
 // add printfs at state boundaries. hiccups 
 // #define DEBUG
 
 
-#ifndef BACKGATE
+#ifdef FRONTGATE
 #define NODEID        9    //frontgate unique for each node on same network
-#else 
+#endif
+#ifdef BACKGATE
 #define NODEID        14    // backgate unique for each node on same network
 #endif
+
 #define GATEWAYID     1    //node Id of the receiver we are sending data to
 #define NETWORKID     100  //the same on all nodes that talk to each other including this node and the gateway
 #define FREQUENCY     RF69_915MHZ //others: RF69_433MHZ, RF69_868MHZ (this must match the RFM69 freq you have on your Moteino)
@@ -56,7 +60,7 @@
 #endif
 
 
-
+#define AUTOCLOSE_SKIPS_LOCK_REV
 
 
 
@@ -170,9 +174,9 @@ const uint8_t EEPROM_loc_lo_fast_close_current_max = 20;
   #define fast_close_current_max_val  1800
 #else 
   #define slow_open_bemf_min_val     1800
-  #define slow_close_bemf_min_val    1600
+  #define slow_close_bemf_min_val    1200
   #define fast_open_bemf_min_val     2500
-  #define fast_close_bemf_min_val    2300
+  #define fast_close_bemf_min_val    2000
   #define slow_open_current_max_val  900
   #define slow_close_current_max_val 1000
   #define fast_open_current_max_val  1450
@@ -258,7 +262,8 @@ const uint8_t STATE_MISSED_LIMIT = 6;  // problem, no limit found. timeout to he
 const uint16_t min_ticks_in_final_traverse = 300; // 3 secs
 const uint16_t max_ticks_in_final_traverse = 500; // 5 secs
 const uint16_t tick_shift = 3;  // ie gain of 1/8, less than 4.5 from the PWM terms. 
-const uint16_t idle_ticks_auto_close = 3000; // 30 seconds.
+//const uint16_t idle_ticks_auto_close = 3000; // 30 seconds.
+const uint16_t idle_ticks_auto_close = 2000; // 30 seconds.   note that in idle, I sleep for 15ms rather than the 10ms normal basic time step. Hence the odd ratio.  
 
 // uint16_t traverse_runtime;
 // uint16_t start_runtime;
@@ -502,42 +507,43 @@ void loop() {
   else
     // not running. Check for button press, or an automatic close timeout, or maybe a radio command
     {
-      for (i=0; i < ontime+offtime+1; i++)
+      //      for (i=0; i < ontime+offtime+1; i++)
+      //	{
+      if (radio.receiveDone())
 	{
-	  if (radio.receiveDone())
-	    {
-	      CheckForWirelessHEX(radio, flash, true);
-
-	        if  (radio.DATALEN == 2)
-		{   
-		  radio_start     = radio.DATA[0] & 1;
-		  radio_autoclose = radio.DATA[1] & 1;
-      if ((radio.DATA[0] & 0xff) == 2) 
-      {
-        resetFunction();
-      }
-		}
-	      if  ((radio.DATALEN == 5) && (radio.DATA[0] == 'W')) // Waadd all in hex 
+	  CheckForWirelessHEX(radio, flash, true);
+	  
+	  if  (radio.DATALEN == 2)
+	    {   
+	      radio_start     = radio.DATA[0] & 1;
+	      radio_autoclose = radio.DATA[1] & 1;
+	      if ((radio.DATA[0] & 0xff) == 2) 
 		{
-		  address = ((radio.DATA[1] & 0x0f) << 4) | (radio.DATA[2] & 0x0f);
-		  dataval = ((radio.DATA[3] & 0x0f) << 4) | (radio.DATA[3] & 0x0f);
-		  EEPROM.write(address,dataval);
-		}
-	      if  ((radio.DATALEN == 3) && (radio.DATA[0] == 'R')) // Waadd all in hex 
-		{
-		  address = ((radio.DATA[1] & 0x0f) << 4) | (radio.DATA[2] & 0x0f);
-		  dataval = EEPROM.read(address);
-		  senderid = radio.SENDERID;
-		  sprintf(buff, "%02x:%02x", address,dataval);
-		  radio.sendWithRetry(senderid, buff, strlen(buff));
-		}
-	      if (radio.ACKRequested())
-		{
-		  radio.sendACK();
+		  resetFunction();
 		}
 	    }
-	  delay(1);
-	}
+	  if  ((radio.DATALEN == 5) && (radio.DATA[0] == 'W')) // Waadd all in hex 
+	    {
+	      address = ((radio.DATA[1] & 0x0f) << 4) | (radio.DATA[2] & 0x0f);
+	      dataval = ((radio.DATA[3] & 0x0f) << 4) | (radio.DATA[3] & 0x0f);
+	      EEPROM.write(address,dataval);
+	    }
+	  if  ((radio.DATALEN == 3) && (radio.DATA[0] == 'R')) // Waadd all in hex 
+	    {
+	      address = ((radio.DATA[1] & 0x0f) << 4) | (radio.DATA[2] & 0x0f);
+	      dataval = EEPROM.read(address);
+	      senderid = radio.SENDERID;
+	      sprintf(buff, "%02x:%02x", address,dataval);
+	      radio.sendWithRetry(senderid, buff, strlen(buff));
+	    }
+	  if (radio.ACKRequested())
+	    {
+	      radio.sendACK();
+	    }
+	} // end of if (radio.receiveDone())
+      //delay(1);       // whats this for?
+      LowPower.powerDown(SLEEP_15MS, ADC_OFF, BOD_OFF);
+      // }
       if ((digitalRead(START_STOP_N) == 0) && (hide_debounce_button == 0) 
 	  || (radio_start == 1)
 	  )
@@ -668,11 +674,25 @@ void update_button_state(void)
       //      radio.sleep();
       if (closed)
 	{
+#ifdef AUTOCLOSE_SKIPS_LOCK_REV
+	  if ((digitalRead(AUTO_CLOSE)==1) ^ (radio_autoclose == 1))
+	    {
+	      now_opening();
+	      buttoned = AUTO;
+	      state = STATE_START;
+	      runtime = 100;
+	    }
+	    else
+	      {
+#endif
 	  now_closing();
 	  digitalWrite(LOCK, LOCK_UNLOCK);
 	  buttoned = AUTO;
 	  state = STATE_REV;
 	  runtime = 100;
+#ifdef AUTOCLOSE_SKIPS_LOCK_REV
+	      }
+#endif
 	}
       else
 	{
