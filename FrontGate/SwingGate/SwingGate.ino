@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-17 15:35:19 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-17 17:05:52 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -247,8 +247,9 @@ const uint8_t STATE_START        = 2;  // get started, slowly. Ignore stall curr
 const uint8_t STATE_ACCEL        = 3;  // accelerate. higher current limit
 const uint8_t STATE_RUN_FAST     = 4;  // middle fast traverse. higher current limit
 const uint8_t STATE_RUN_SLOW     = 5;  // go slowly.  Check current+bemf limys,
-                                    // its intended the limit gets hit in this state
-const uint8_t STATE_MISSED_LIMIT = 6;  // problem, no limit found. timeout to here. 
+                                       // its intended the limit gets hit in this state
+const uint8_t STATE_REACHED_LIMIT = 6; // limit swich found.  
+const uint8_t STATE_MISSED_LIMIT = 7;  // problem, no limit found. timeout to here. 
 
 // in general, from closed, the normal flow was
 // STOPPED --pb--> START --time-> ACCEL --time-> RUN_FAST --time-> RUN_SLOW --stalled-> STOPPED 
@@ -352,6 +353,7 @@ void setup() {
   filt_pointer = 0;
   closed = false;
   run_runtime = 0;
+  runtime = 0;
   buttoned = AUTO;
   biggest_Irun_seen = 0;
   smallest_bemf_seen  = 10000;
@@ -471,8 +473,10 @@ void loop() {
 	  filt_pointer++;
 	}
       delay(offtime);
-      
 
+
+      runtime--;
+      
       if (runtime == 0) {
 #ifdef DEBUG
 	sprintf(buff, "%02x timed exit of state %d min_bemf=%d max_i=%d", NODEID, state, smallest_bemf_seen, biggest_Irun_seen);
@@ -486,9 +490,6 @@ void loop() {
 	biggest_Irun_seen = 0;
 #endif
 	
-      }
-      else {
-	runtime--;
       }
       
       if  ((digitalRead(START_STOP_N) == 0) && (hide_debounce_button == 0))
@@ -642,12 +643,10 @@ void update_timed_state(void)
       offtime = SLOW_OFFTIME;
       break;
     
-      // this is an abnormal exit now
+      // this is an exit for limit sw now
     case STATE_MISSED_LIMIT :
-      state = STATE_STOPPED;
       stop_motor();
-      runtime = 0;
-      run_runtime = 0;
+      // run_runtime = 0;
       if (last_drn == 'C') 
 	sprintf(buff,"%02x missed lim C minBEMF %d (%d) maxI %d (%d)", NODEID,
 		smallest_bemf_seen, slow_close_BEMF_min,
@@ -743,16 +742,14 @@ void update_button_state(void)
 	sprintf(buff,"%02x button stop O %d (%d) %d (%d) %d", NODEID, back_emf, slow_open_BEMF_min, on_current, slow_open_I_max, state);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
-      state = STATE_STOPPED;
-      buttoned = MANUAL; 
+      //   buttoned = MANUAL; 
       stop_motor();
-      runtime=0;
       closed = false;
       break;
     }
 }
 
-// entered on stall or overcurrent
+// entered on stall or overcurrent or proximity switch
 void update_motor_state(void)
 {
   int i;
@@ -770,8 +767,6 @@ void update_motor_state(void)
 	sprintf(buff,"%02x stall fast O V=%d/%d I=%d/%d s=%d rt=%d", NODEID, back_emf, fast_open_BEMF_min, on_current, fast_open_I_max, state, run_runtime);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
-      state = STATE_STOPPED;
-      runtime=0;
       stop_motor();
       run_runtime = 0;
       closed = false;
@@ -783,17 +778,25 @@ void update_motor_state(void)
       
     case STATE_RUN_SLOW :
     case STATE_MISSED_LIMIT :
-      if (last_drn == 'C')
-	sprintf(buff,"%02x stalled runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_close_BEMF_min, on_current, slow_close_I_max, state, run_runtime, last_drn);
-      else 
-	sprintf(buff,"%02x stalled runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_open_BEMF_min, on_current, slow_open_I_max, state, run_runtime, last_drn);
+      if (digitalRead(PROXIMITY_N) == 0) {
+	if (last_drn == 'C')
+	  sprintf(buff,"%02x limit runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_close_BEMF_min, on_current, slow_close_I_max, state, run_runtime, last_drn);
+	else 
+	  sprintf(buff,"%02x limit runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_open_BEMF_min, on_current, slow_open_I_max, state, run_runtime, last_drn);
+      }
+      else {
+	
+	
+	if (last_drn == 'C')
+	  sprintf(buff,"%02x stalled runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_close_BEMF_min, on_current, slow_close_I_max, state, run_runtime, last_drn);
+	else 
+	  sprintf(buff,"%02x stalled runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_open_BEMF_min, on_current, slow_open_I_max, state, run_runtime, last_drn);
 
+      }
 	radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-      //      radio.sleep();
+	//      radio.sleep();
       update_runtimes(ticks);
       buttoned = AUTO;
-      state = STATE_STOPPED;
-      runtime=0;
       stop_motor();
       
       delay(100);
@@ -887,4 +890,8 @@ void stop_motor (void)
   digitalWrite(EN1, PWM_OFF);
   digitalWrite(EN2, PWM_OFF);
   digitalWrite(PROXIMITY_PWR,0);  // power down proximity switches
+
+  state = STATE_STOPPED;
+  runtime=0;
+
 }
