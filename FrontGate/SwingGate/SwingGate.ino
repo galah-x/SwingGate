@@ -1,12 +1,16 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2020-02-15 14:48:15 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-17 15:35:19 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
 // going to engineer my own so I can fix it more easily
 
 // basically I have to drive an unlock solenoid at about 1.5A for a second or so at start of open
+// optionally, when the lock pin is fitted.
+// Also the lock bracket the pin goes into is a royal pain. As the gate moves aroud in wet weather,
+// it jams and clashes.
+//
 // and I have to drive a swing linear actuator at run current of a couple of A (~15A stall) 
 // interface to a pushbutton  (radio remotes bang a relay pretending to be the PB)
 // and a toggle switch controlling whether to autoclose or not,
@@ -323,7 +327,7 @@ void setup() {
   pinMode(START_STOP_N, INPUT);
   pinMode(AUTO_CLOSE, INPUT_PULLUP);
   pinMode(PROXIMITY_PWR, OUTPUT);
-  pinMode(PROXIMITY_N, INPUT);
+  pinMode(PROXIMITY_N, INPUT_PULLUP);
 
   analogReference(DEFAULT);
   
@@ -337,7 +341,7 @@ void setup() {
   
   //  radio.sendWithRetry(GATEWAYID, "START", 5);
 
-  sprintf(buff, "%02x SwingGate 20200118", NODEID);
+  sprintf(buff, "%02x SwingGate 20200417", NODEID);
   radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
   
   // radio.sleep();
@@ -468,7 +472,7 @@ void loop() {
 	}
       delay(offtime);
       
-      runtime--;
+
       if (runtime == 0) {
 #ifdef DEBUG
 	sprintf(buff, "%02x timed exit of state %d min_bemf=%d max_i=%d", NODEID, state, smallest_bemf_seen, biggest_Irun_seen);
@@ -483,6 +487,10 @@ void loop() {
 #endif
 	
       }
+      else {
+	runtime--;
+      }
+      
       if  ((digitalRead(START_STOP_N) == 0) && (hide_debounce_button == 0))
 	{
 	  update_button_state();
@@ -575,7 +583,8 @@ void loop() {
 }
 
 
-// update the state variables 
+// update the state variables
+// come here when a timeout expires
 void update_timed_state(void)
 {
   uint16_t batt_adc;
