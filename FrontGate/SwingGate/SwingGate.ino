@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-17 17:05:52 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-17 17:10:58 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -497,22 +497,24 @@ void loop() {
 	  update_button_state();
 	  hide_debounce_button = debounce_button_period;
 	}
-      if  (
-	   ((( state == STATE_RUN_SLOW) || ( state == STATE_MISSED_LIMIT) || ( state == STATE_RUN_FAST)) && (digitalRead(PROXIMITY_N) == 0)) ||
-	   
-	   ((( state == STATE_RUN_SLOW) || ( state == STATE_MISSED_LIMIT)) && (last_drn == 'C')
-	    && ((back_emf < slow_close_BEMF_min) || (on_current > slow_close_I_max))) ||
-	   ((( state == STATE_RUN_SLOW) || ( state == STATE_MISSED_LIMIT)) && (last_drn == 'O')
-	    && ((back_emf < slow_open_BEMF_min) || (on_current > slow_open_I_max))) ||
-	   (( state == STATE_RUN_FAST) && (last_drn == 'C')
-	    && ((back_emf < fast_close_BEMF_min) || (on_current > fast_close_I_max))) ||
-	   (( state == STATE_RUN_FAST) && (last_drn == 'O')
-	    && ((back_emf < fast_open_BEMF_min) || (on_current > fast_open_I_max)))
-	   )
-	{
-	  update_motor_state();
-	}
+      if (runtime > 0) 
+	if  (
+	     ((( state == STATE_RUN_SLOW) || ( state == STATE_MISSED_LIMIT) || ( state == STATE_RUN_FAST)) && (digitalRead(PROXIMITY_N) == 0)) ||
+	     
+	     ((( state == STATE_RUN_SLOW) || ( state == STATE_MISSED_LIMIT)) && (last_drn == 'C')
+	      && ((back_emf < slow_close_BEMF_min) || (on_current > slow_close_I_max))) ||
+	     ((( state == STATE_RUN_SLOW) || ( state == STATE_MISSED_LIMIT)) && (last_drn == 'O')
+	      && ((back_emf < slow_open_BEMF_min) || (on_current > slow_open_I_max))) ||
+	     (( state == STATE_RUN_FAST) && (last_drn == 'C')
+	      && ((back_emf < fast_close_BEMF_min) || (on_current > fast_close_I_max))) ||
+	     (( state == STATE_RUN_FAST) && (last_drn == 'O')
+	      && ((back_emf < fast_open_BEMF_min) || (on_current > fast_open_I_max)))
+	     )
+	  {
+	    update_motor_state();
+	  }
     }
+  
   else
     // not running. Check for button press, or an automatic close timeout, or maybe a radio command
     {
