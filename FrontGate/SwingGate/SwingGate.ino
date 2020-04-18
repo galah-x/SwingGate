@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-18 14:14:29 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-18 14:53:20 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -422,7 +422,7 @@ void loop() {
     }
   
   // basic pwm routine
-  if (runtime > 0)
+  if (runtime > 0)       // runtime > 0 just means its actually moving.
     {
       // on part of pwm cycle
       digitalWrite(drn_enable, PWM_ON);
@@ -569,10 +569,9 @@ void loop() {
 	{
 	  ticks=0;
 
-	  if (((digitalRead(AUTO_CLOSE)==1) ^ (radio_autoclose == 1))
-	      && (!closed)
-	      && (buttoned==AUTO)
-	      )
+	  //	  if (((digitalRead(AUTO_CLOSE)==1) ^ (radio_autoclose == 1))
+	  // always autoclose now. buttoned==manual replaces that function
+	  if ((!closed) && (buttoned==AUTO))
 	    {
 	      now_closing();
 	      state = STATE_START;
@@ -695,13 +694,15 @@ void update_button_state(void)
 	      runtime = 100;
 	    }
 	    else
-	      {
 #endif
+	      {
+
 	  now_closing();
 	  digitalWrite(LOCK, LOCK_UNLOCK);
 	  buttoned = AUTO;
 	  state = STATE_REV;
 	  runtime = 100;
+
 #ifdef AUTOCLOSE_SKIPS_UNLOCK
 	      }
 #endif
