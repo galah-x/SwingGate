@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-18 14:53:20 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-18 16:06:07 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -230,9 +230,9 @@ const uint8_t DRN_OPENING = 'O';
 bool closed;   // true == closed
 
 // did someone hit the button except to start it initially.
-uint8_t buttoned;
-const uint8_t MANUAL = 1;
-const uint8_t AUTO = 0;
+bool button_auto;
+//const uint8_t MANUAL = 1;
+//const uint8_t AUTO = 0;
 
 uint8_t radio_autoclose;
 uint8_t radio_start;
@@ -354,7 +354,7 @@ void setup() {
   closed = false;
   run_runtime = 0;
   runtime = 0;
-  buttoned = AUTO;
+  button_auto = true;
   biggest_Irun_seen = 0;
   smallest_bemf_seen  = 10000;
   radio_autoclose = 0;
@@ -571,7 +571,7 @@ void loop() {
 
 	  //	  if (((digitalRead(AUTO_CLOSE)==1) ^ (radio_autoclose == 1))
 	  // always autoclose now. buttoned==manual replaces that function
-	  if ((!closed) && (buttoned==AUTO))
+	  if ((!closed) && (button_auto == true))
 	    {
 	      now_closing();
 	      state = STATE_START;
@@ -608,7 +608,7 @@ void update_timed_state(void)
 
     case STATE_START :
       digitalWrite(LOCK, LOCK_LOCKED);
-      if (run_runtime && (buttoned == AUTO))
+      if (run_runtime && (button_auto == true))
 	{
 	  state = STATE_ACCEL;
 	  ontime = MED_ONTIME;
@@ -689,7 +689,7 @@ void update_button_state(void)
 	  if ((digitalRead(AUTO_CLOSE)==1) ^ (radio_autoclose == 1))
 	    {
 	      now_opening();
-	      buttoned = AUTO;
+	      button_auto = true;
 	      state = STATE_START;
 	      runtime = 100;
 	    }
@@ -699,7 +699,7 @@ void update_button_state(void)
 
 	  now_closing();
 	  digitalWrite(LOCK, LOCK_UNLOCK);
-	  buttoned = AUTO;
+	  button_auto = true;
 	  state = STATE_REV;
 	  runtime = 100;
 
@@ -709,7 +709,7 @@ void update_button_state(void)
 	}
       else
 	{
-	  if (buttoned == MANUAL)
+	  if (button_auto == false)
 	    {
 	      if (last_drn == 'O')
 		{
@@ -747,7 +747,7 @@ void update_button_state(void)
 	sprintf(buff,"%02x button stop O %d (%d) %d (%d) %d", NODEID, back_emf, slow_open_BEMF_min, on_current, slow_open_I_max, state);
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
-      //   buttoned = MANUAL; 
+      button_auto = false; 
       stop_motor();
       closed = false;
       break;
@@ -775,7 +775,7 @@ void update_motor_state(void)
       stop_motor();
       run_runtime = 0;
       closed = false;
-      buttoned = AUTO;
+      button_auto = true;
       ticks=0;
       break;
 
@@ -800,7 +800,7 @@ void update_motor_state(void)
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
       //      radio.sleep();
       update_runtimes(ticks);
-      buttoned = AUTO;
+      button_auto = true;
       stop_motor();
       
       delay(100);
