@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-17 17:10:58 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-17 17:29:13 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -37,7 +37,7 @@
 
 
 // add printfs at state boundaries. hiccups 
-// #define DEBUG
+#define DEBUG
 
 
 #ifdef FRONTGATE
@@ -342,7 +342,7 @@ void setup() {
   
   //  radio.sendWithRetry(GATEWAYID, "START", 5);
 
-  sprintf(buff, "%02x SwingGate 20200417", NODEID);
+  sprintf(buff, "%02x SwingGate 20200417 ac=%b", NODEID, digitalRead(AUTO_CLOSE));
   radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
   
   // radio.sleep();
