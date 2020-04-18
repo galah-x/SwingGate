@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-17 17:29:13 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-18 14:14:29 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -64,7 +64,7 @@
 #endif
 
 
-#define AUTOCLOSE_SKIPS_LOCK_REV
+#define AUTOCLOSE_SKIPS_UNLOCK
 
 
 
@@ -342,7 +342,7 @@ void setup() {
   
   //  radio.sendWithRetry(GATEWAYID, "START", 5);
 
-  sprintf(buff, "%02x SwingGate 20200417 ac=%b", NODEID, digitalRead(AUTO_CLOSE));
+  sprintf(buff, "%02x SwingGate 20200418 ac=%x", NODEID, digitalRead(AUTO_CLOSE));
   radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
   
   // radio.sleep();
@@ -533,6 +533,7 @@ void loop() {
 		  resetFunction();
 		}
 	    }
+#ifdef USE_EEPROM
 	  if  ((radio.DATALEN == 5) && (radio.DATA[0] == 'W')) // Waadd all in hex 
 	    {
 	      address = ((radio.DATA[1] & 0x0f) << 4) | (radio.DATA[2] & 0x0f);
@@ -547,6 +548,7 @@ void loop() {
 	      sprintf(buff, "%02x:%02x", address,dataval);
 	      radio.sendWithRetry(senderid, buff, strlen(buff));
 	    }
+#endif
 	  if (radio.ACKRequested())
 	    {
 	      radio.sendACK();
@@ -684,7 +686,7 @@ void update_button_state(void)
       //      radio.sleep();
       if (closed)
 	{
-#ifdef AUTOCLOSE_SKIPS_LOCK_REV
+#ifdef AUTOCLOSE_SKIPS_UNLOCK
 	  if ((digitalRead(AUTO_CLOSE)==1) ^ (radio_autoclose == 1))
 	    {
 	      now_opening();
@@ -700,7 +702,7 @@ void update_button_state(void)
 	  buttoned = AUTO;
 	  state = STATE_REV;
 	  runtime = 100;
-#ifdef AUTOCLOSE_SKIPS_LOCK_REV
+#ifdef AUTOCLOSE_SKIPS_UNLOCK
 	      }
 #endif
 	}
@@ -782,21 +784,20 @@ void update_motor_state(void)
     case STATE_MISSED_LIMIT :
       if (digitalRead(PROXIMITY_N) == 0) {
 	if (last_drn == 'C')
-	  sprintf(buff,"%02x limit runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_close_BEMF_min, on_current, slow_close_I_max, state, run_runtime, last_drn);
-	else 
+	    sprintf(buff,"%02x limit runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_close_BEMF_min, on_current, slow_close_I_max, state, run_runtime, last_drn);
+	else
 	  sprintf(buff,"%02x limit runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_open_BEMF_min, on_current, slow_open_I_max, state, run_runtime, last_drn);
       }
       else {
 	
 	
 	if (last_drn == 'C')
-	  sprintf(buff,"%02x stalled runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_close_BEMF_min, on_current, slow_close_I_max, state, run_runtime, last_drn);
-	else 
+	    sprintf(buff,"%02x stalled runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_close_BEMF_min, on_current, slow_close_I_max, state, run_runtime, last_drn);
+	else
 	  sprintf(buff,"%02x stalled runslow V=%d/%d I=%d/%d s=%d rt=%d %c", NODEID, back_emf, slow_open_BEMF_min, on_current, slow_open_I_max, state, run_runtime, last_drn);
-
       }
-	radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-	//      radio.sleep();
+      radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
+      //      radio.sleep();
       update_runtimes(ticks);
       buttoned = AUTO;
       stop_motor();
@@ -807,7 +808,7 @@ void update_motor_state(void)
       dtostrf(batt_v, 5, 2, buff2);
       sprintf(buff, "%02x Batt=%sV rrt=%d rac=%d ac=%d", NODEID, buff2, run_runtime, radio_autoclose, digitalRead(AUTO_CLOSE)   );  
       radio.sendWithRetry(GATEWAYID, buff, strlen(buff));
-
+      
       ticks=0;
       if (last_drn == 'C')
 	{
