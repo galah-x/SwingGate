@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-18 16:06:07 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-18 16:53:37 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -328,7 +328,14 @@ void setup() {
   pinMode(START_STOP_N, INPUT);
   pinMode(AUTO_CLOSE, INPUT_PULLUP);
   pinMode(PROXIMITY_PWR, OUTPUT);
+  
+  // there is a serious series R on the proximity sw, can't have an input pullup
+  // if its not fitted, pull high to deassert.
+#ifdef PROXIMITY_FITTED
+  pinMode(PROXIMITY_N, INPUT);  
+#else 
   pinMode(PROXIMITY_N, INPUT_PULLUP);
+#endif
 
   analogReference(DEFAULT);
   
@@ -351,7 +358,7 @@ void setup() {
   ticks=0;
   hide_debounce_button=0;
   filt_pointer = 0;
-  closed = false;
+  closed = true;
   run_runtime = 0;
   runtime = 0;
   button_auto = true;
@@ -359,6 +366,8 @@ void setup() {
   smallest_bemf_seen  = 10000;
   radio_autoclose = 0;
   radio_start = 0;
+  ontime = SLOW_ONTIME;
+  offtime = SLOW_OFFTIME;
 
   // this bit sets up values in EEROM only in the case eerom in unconfigured
 #ifdef USE_EEPROM
@@ -491,7 +500,8 @@ void loop() {
 #endif
 	
       }
-      
+
+      // 
       if  ((digitalRead(START_STOP_N) == 0) && (hide_debounce_button == 0))
 	{
 	  update_button_state();
