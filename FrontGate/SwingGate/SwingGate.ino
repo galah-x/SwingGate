@@ -1,6 +1,6 @@
 //    -*- Mode: c++     -*-
 // emacs automagically updates the timestamp field on save
-// my $ver =  'SwingGate for moteino Time-stamp: "2020-04-18 17:06:29 john"';
+// my $ver =  'SwingGate for moteino Time-stamp: "2021-04-05 11:06:57 john"';
 
 
 // Given the controller boards have been destroyed by lightning for the last 2 summers running,
@@ -31,8 +31,6 @@
 // define this for current proto build front gate
 // #define PROTOTYPE
 
-// define this for the back gate, not the front gate
-// #define BACKGATE
 #include "whichgate.h"
 
 
@@ -40,12 +38,6 @@
 #define DEBUG
 
 
-#ifdef FRONTGATE
-#define NODEID        9    //frontgate unique for each node on same network
-#endif
-#ifdef BACKGATE
-#define NODEID        14    // backgate unique for each node on same network
-#endif
 
 #define GATEWAYID     1    //node Id of the receiver we are sending data to
 #define NETWORKID     100  //the same on all nodes that talk to each other including this node and the gateway
@@ -124,10 +116,6 @@ const uint8_t PROXIMITY_N   = A1;  // proximity detectors.. its an open collecto
 #define LOCK_UNLOCK       1
 #define LOCK_LOCKED       0
 
-// the battery adc sense uses a 404k resistor and 100k, for attenuation of 0.198.
-// Alternatively using the 3v3 rail as reference (its a small switcher off 12)
-// V = count /1024 * (3.3 / 0.1984)  or V = count * 0.01624
-#define BATT_GAIN 0.01624
 
 char buff[60]; //this is just an empty string used as a buffer to place the payload for the radio
 char buff2[10]; //this is just an empty string used for float conversions
@@ -167,27 +155,6 @@ const uint8_t EEPROM_loc_hi_fast_close_current_max = 19;
 const uint8_t EEPROM_loc_lo_fast_close_current_max = 20;
 #endif
 
-#ifdef BACKGATE
-#define slow_open_bemf_min_val     1950
-#define slow_open_current_max_val  1000
-#define fast_open_bemf_min_val     2500
-#define fast_open_current_max_val  1800
-#define slow_close_bemf_min_val     1950
-#define slow_close_current_max_val  1000
-#define fast_close_bemf_min_val     2500
-#define fast_close_current_max_val  1800
-
-#else 
-// frontgate
-#define slow_open_bemf_min_val     1500
-#define slow_close_bemf_min_val    1200
-#define fast_open_bemf_min_val     2500
-#define fast_close_bemf_min_val    2000
-#define slow_open_current_max_val  900
-#define slow_close_current_max_val 1000
-#define fast_open_current_max_val  1450
-#define fast_close_current_max_val 1750
-#endif
 
 #define bemf_init_val  500
 #define current_init_val  0 
